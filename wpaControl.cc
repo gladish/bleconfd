@@ -1,3 +1,20 @@
+//
+// Copyright [2018] [jacobgladish@yahoo.com]
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+#include "wpaControl.h"
+#include "logger.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -17,38 +34,20 @@
 
 #define UNUSED_PARAM(X) UNUSED_ ## X __attribute__((__unused__))
 
-// public interface to managing/controlling wpa_supplicant
-
-int wpa_control_init();
-int wpa_control_shutdown();
-int wpa_control_command(cJSON const* req, cJSON** res);
-
-cJSON* make_request(char const* cmd)
-{
-  cJSON* doc = cJSON_CreateObject();
-  cJSON_AddItemToObject(doc, "cmd", cJSON_CreateString(cmd));
-  return doc;
-}
-
 static struct wpa_ctrl* wpa_request = nullptr;
 static void* wpa_notify_read(void* argp);
 static int wpa_shutdown_pipe[2];
 static pthread_t wpa_notify_thread;
 
-int main(int UNUSED_PARAM(argc), char** UNUSED_PARAM(argv))
-{
-  wpa_control_init();
-  // yes this leaks the request
-  wpa_control_command(make_request("STATUS"), nullptr);
-  wpa_control_command(make_request("STATUS"), nullptr);
-  wpa_control_shutdown();
-  return 0;
-}
+static cJSON* wpaControl_createResponse(std::string const& s);
 
 int
-wpa_control_init()
+wpaControl_init(char const* control_socket)
 {
-  std::string         wpa_socket_name = "/var/run/wpa_supplicant/wlan0";
+  if (!control_socket)
+    return EINVAL;
+
+  std::string         wpa_socket_name = control_socket;
   struct wpa_ctrl*    wpa_notify = nullptr;
 
   pipe2(wpa_shutdown_pipe, O_CLOEXEC);
@@ -68,6 +67,7 @@ wpa_control_init()
   wpa_ctrl_attach(wpa_notify);
 
   pthread_create(&wpa_notify_thread, nullptr, &wpa_notify_read, wpa_notify);
+
   return 0;
 }
 
@@ -122,29 +122,23 @@ wpa_notify_read(void* argp)
 }
 
 int
-wpa_control_command(cJSON const* req, cJSON** res)
+wpaControl_command(char const* cmd, std::string& res)
 {
-  size_t            n;
-  std::vector<char> buff;
-  char const*       cmd;
+  res.reserve(4096);
+  res.resize(4096);
 
-  buff.reserve(4096);
-  buff.resize(4096);
-  n = buff.capacity();
+  size_t n = res.capacity();
 
-  cJSON* temp = cJSON_GetObjectItem(req, "cmd");
-  cmd = temp->valuestring;
-
-  int ret = wpa_ctrl_request(wpa_request, cmd, strlen(cmd), buff.data(), &n, nullptr);
+  int ret = wpa_ctrl_request(wpa_request, cmd, strlen(cmd), &res[0], &n, nullptr);
   if (ret < 0)
     return errno;
 
-  printf("%.*s\n", n, buff.data());
+  res.resize(n);
   return 0;
 }
 
 int
-wpa_control_shutdown()
+wpaControl_shutdown()
 {
   std::string s = "shutdown-now";
   write(wpa_shutdown_pipe[1], s.c_str(), s.length());
@@ -152,4 +146,53 @@ wpa_control_shutdown()
   void* retval = nullptr;
   pthread_join(wpa_notify_thread, &retval);
   return 0;
+}
+
+int
+wpaControl_connectToNetwork(cJSON const*, cJSON**)
+{
+  return 0;
+}
+
+int
+wpaControl_getStatus(cJSON const* UNUSED_PARAM(req), cJSON** res)
+{
+  std::string buff;
+
+  int ret = wpaControl_command("STATUS", buff);
+  if (ret)
+    XLOG_WARN("%s:%d", __FUNCTION__, ret);
+  else
+    *res = wpaControl_createResponse(buff);
+
+  return 0;
+}
+
+cJSON*
+wpaControl_createResponse(std::string const& s)
+{
+  cJSON* res = cJSON_CreateObject();
+
+  size_t begin = 0;
+  while (true)
+  {
+    size_t end = s.find('\n', begin);
+    if (end == std::string::npos)
+      break;
+
+    std::string line(s.substr(begin, (end - begin)));
+    size_t mid = line.find('=');
+
+    if (mid != std::string::npos)
+    {
+      std::string name(line.substr(0, mid));
+      std::string value(line.substr(mid + 1));
+
+      cJSON_AddItemToObject(res, name.c_str(), cJSON_CreateString(value.c_str()));
+    }
+
+    begin = end + 1;
+  }
+
+  return res;
 }
