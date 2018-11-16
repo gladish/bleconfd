@@ -14,7 +14,7 @@
 // limitations under the License.
 //
 #include "wpaControl.h"
-#include "logger.h"
+#include "xLog.h"
 #include "jsonRpc.h"
 
 #include <stdint.h>

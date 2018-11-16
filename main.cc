@@ -16,7 +16,7 @@
 #include "jsonRpc.h"
 #include "wpaControl.h"
 #include "appSettings.h"
-#include "logger.h"
+#include "xLog.h"
 
 #include <getopt.h>
 
@@ -31,13 +31,36 @@ static cJSON* Test_appSettingsSet();
 
 int main(int argc, char* argv[])
 {
-  // TODO: take configuration file from command line (use getopt_long())
+  std::string configFile = "bleconfd.ini";
 
-  Logger::getLogger().setLevel(logLevel_Debug);
+  while (true)
+  {
+    static struct option longOptions[] = 
+    {
+      { "config", required_argument, 0, 'c' },
+      { 0, 0, 0, 0 }
+    };
+
+    int optionIndex = 0;
+    int c = getopt_long(argc, argv, "c:", longOptions, &optionIndex);
+    if (c == -1)
+      break;
+
+    switch (c)
+    {
+      case 'c':
+        configFile = optarg;
+        break;
+      default:
+        break;
+    }
+  }
+
+  xLog::getLogger().setLevel(logLevel_Debug);
 
   rpcServer_init();
   wpaControl_init("/var/run/wpa_supplicant/wlan1");
-  appSettings_init("bleconfd.ini");
+  appSettings_init(configFile.c_str());
 
   // TODO: read this from BLE inbox
 

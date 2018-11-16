@@ -11,7 +11,7 @@ SRCS=\
   main.cc \
   wpaControl.cc \
   jsonRpc.cc \
-  logger.cc \
+  xLog.cc \
   appSettings.cc
 
 OBJS=$(patsubst %.cc, %.o, $(notdir $(SRCS)))

@@ -15,7 +15,7 @@
 //
 #include "appSettings.h"
 #include "jsonRpc.h"
-#include "logger.h"
+#include "xLog.h"
 
 #include <glib.h>
 
