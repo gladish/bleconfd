@@ -15,6 +15,7 @@
 //
 #include "wpaControl.h"
 #include "logger.h"
+#include "jsonRpc.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -40,6 +41,7 @@ static int wpa_shutdown_pipe[2];
 static pthread_t wpa_notify_thread;
 
 static cJSON* wpaControl_createResponse(std::string const& s);
+static cJSON* wpaControl_createError(int err);
 
 int
 wpaControl_init(char const* control_socket)
@@ -151,6 +153,7 @@ wpaControl_shutdown()
 int
 wpaControl_connectToNetwork(cJSON const*, cJSON**)
 {
+  // TODO
   return 0;
 }
 
@@ -161,7 +164,7 @@ wpaControl_getStatus(cJSON const* UNUSED_PARAM(req), cJSON** res)
 
   int ret = wpaControl_command("STATUS", buff);
   if (ret)
-    XLOG_WARN("%s:%d", __FUNCTION__, ret);
+    *res = wpaControl_createError(ret);
   else
     *res = wpaControl_createResponse(buff);
 
@@ -195,4 +198,16 @@ wpaControl_createResponse(std::string const& s)
   }
 
   return res;
+}
+
+cJSON*
+wpaControl_createError(int err)
+{
+  char buff[256] = {0};
+  char* s = strerror_r(err, buff, sizeof(buff));
+
+  cJSON* temp = nullptr;
+  jsonRpc_makeError(&temp, err, "%s", s);
+
+  return temp;
 }

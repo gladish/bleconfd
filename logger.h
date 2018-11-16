@@ -69,4 +69,11 @@ private:
 #define XLOG_ERROR(FORMAT, ...) XLOG(logLevel_Error, FORMAT, ##__VA_ARGS__)
 #define XLOG_CRITICAL(FORMAT, ...) XLOG(logLevel_Critical, FORMAT, ##__VA_ARGS__)
 
+#define XLOG_JSON(LEVEL, JSON) \
+  do { if (Logger::getLogger().isLevelEnabled(LEVEL)) {\
+    char* s = cJSON_Print(JSON); \
+    Logger::getLogger().log(LEVEL, "", __LINE__ -2, "%s", s); \
+    free(s); \
+  } } while (0)
+
 #endif

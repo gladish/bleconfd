@@ -116,19 +116,26 @@ jsonRpc_getInt(cJSON* argv, int idx)
 }
 
 char const*
-jsonRpc_getString(cJSON* argv, char const* name, int idx)
+jsonRpc_getString(cJSON const* req, char const* name, bool required)
 {
   char* s = NULL;
-  cJSON* obj = jsonRpc_getn(argv, idx);
-  cJSON* item = cJSON_GetObjectItem(obj, name);
 
-  if (!item)
+  cJSON* params = cJSON_GetObjectItem(req, "params");
+  if (!params && required)
+  {
+    std::stringstream buff;
+    buff << "missing 'params' structure in request";
+    throw std::runtime_error(buff.str());
+  }
+
+  cJSON* item = cJSON_GetObjectItem(params, name);
+
+  if (!item && required)
   {
     std::stringstream buff;
     buff << "missing argument ";
     buff << name;
-    buff << " from argv list with index ";
-    buff << idx;
+    buff << " from argv list";
     throw std::runtime_error(buff.str());
   }
 
@@ -435,4 +442,10 @@ jsonRpc_resultUnsignedInt(int ret, unsigned int& n, cJSON** result)
   else
     ret = jsonRpc_makeError(result, ret, "failed");
   return ret;
+}
+
+int
+jsonRpc_notImplemented(cJSON** result)
+{
+  return jsonRpc_makeError(result, ENOENT, "method not implementd");
 }

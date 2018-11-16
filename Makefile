@@ -11,7 +11,8 @@ SRCS=\
   main.cc \
   wpaControl.cc \
   jsonRpc.cc \
-  logger.cc
+  logger.cc \
+  appSettings.cc
 
 OBJS=$(patsubst %.cc, %.o, $(notdir $(SRCS)))
 OBJS+=wpa_ctrl.o os_unix.o

@@ -61,12 +61,7 @@ int jsonRpc_getInt(cJSON* argv, int idx);
 /**
  *
  */
-char const* jsonRpc_getString(cJSON* argv, int idx);
-
-/**
- *
- */
-char const* jsonRpc_getString(cJSON* argv, char const* name, int idx = 0);
+char const* jsonRpc_getString(cJSON const* req, char const* name, bool required = false);
 
 /**
  *
@@ -108,6 +103,8 @@ int jsonRpc_makeResult(cJSON** result, cJSON* value);
 
 int jsonRpc_makeResultValue(cJSON** result, int code, char const* fmt, ...)
   __attribute__((format (printf, 3, 4)));
+
+int jsonRpc_notImplemented(cJSON** result);
 
 #if 0
 class jsonRpcStringBuffer
