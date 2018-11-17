@@ -14,14 +14,83 @@
 // limitations under the License.
 //
 #include "jsonRpc.h"
-#include "wpaControl.h"
 #include "appSettings.h"
+#include "wpaControl.h"
+#include "gattServer.h"
 #include "xLog.h"
 
 #include <getopt.h>
 
+namespace
+{
+  class RpcDispatcher
+  {
+  public:
+    RpcDispatcher(std::shared_ptr<GattClient> const& clnt)
+      : m_client(clnt)
+    {
+    }
+
+    void onIncomingMessage(cJSON* req)
+    {
+      char* s = cJSON_Print(req);
+      if (s)
+      {
+        XLOG_DEBUG("incoming request\n\t%s", s);
+        free(s);
+      }
+
+      cJSON* response = nullptr;
+      cJSON* method = cJSON_GetObjectItem(req, "method");
+      if (!method)
+      {
+        XLOG_ERROR("request doesn't contain method");
+        // TODO
+      }
+
+      cJSON* id = cJSON_GetObjectItem(req, "id");
+      if (!id)
+      {
+        XLOG_ERROR("request doesn't contain id");
+        // TODO
+      }
+
+      jsonRpcFunction func = jsonRpc_findFunction(method->valuestring);
+      if (func)
+      {
+        cJSON* temp = cJSON_CreateObject();
+        cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString("2.0"));
+        cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(id->valueint));
+
+        int ret = func(req, &response);
+        if (ret)
+          cJSON_AddItemToObject(temp, "error", response);
+        else
+          cJSON_AddItemToObject(temp, "result", response);
+      }
+      else
+      {
+        XLOG_ERROR("failed to find registered function %s", method->valuestring);
+      }
+
+      cJSON_Delete(req);
+
+      try
+      {
+        m_client->enqueueForSend(response);
+      }
+      catch (std::exception const& err)
+      {
+        XLOG_ERROR("failed to queue response for send. %s", err.what());
+      }
+    }
+
+  private:
+    std::shared_ptr<GattClient> m_client; 
+  };
+}
+
 static void rpcServer_init();
-static void rpcServer_dispatch(cJSON const* req, cJSON** res);
 
 // TODO: proper test framework
 static cJSON* Test_wifiConnect();
@@ -62,8 +131,29 @@ int main(int argc, char* argv[])
   wpaControl_init("/var/run/wpa_supplicant/wlan1");
   appSettings_init(configFile.c_str());
 
-  // TODO: read this from BLE inbox
+  try
+  {
+    GattServer server;
+    server.init();
 
+    // blocks here until remote client makes BT connection
+    std::shared_ptr<GattClient> clnt = server.accept();
+    RpcDispatcher dispatcher(clnt);
+
+    // incoming messages get dispached here
+    clnt->setDataHandler(std::bind(&RpcDispatcher::onIncomingMessage, &dispatcher,
+      std::placeholders::_1));
+
+    // blocks inside run until client disconnects
+    clnt->run();
+  }
+  catch (std::runtime_error const& err)
+  {
+    XLOG_ERROR("unhandled exception:%s", err.what());
+    return -1;
+  }
+
+#if 0
   cJSON* req = Test_appSettingsGet();
   cJSON* res = nullptr;
 
@@ -78,60 +168,11 @@ int main(int argc, char* argv[])
     cJSON_Delete(res);
   }
   cJSON_Delete(req);
+#endif
+
 
   wpaControl_shutdown();
   return 0;
-}
-
-void rpcServer_dispatch(cJSON const* req, cJSON** res)
-{
-  if (!res)
-  {
-    XLOG_ERROR("null request object");
-    // TODO
-  }
-
-  char* s = cJSON_Print(req);
-  if (s)
-  {
-    XLOG_DEBUG("incoming request\n\t%s", s);
-    free(s);
-  }
-
-  cJSON* response = nullptr;
-  cJSON* method = cJSON_GetObjectItem(req, "method");
-  if (!method)
-  {
-    XLOG_ERROR("request doesn't contain method");
-    // TODO
-  }
-
-  cJSON* id = cJSON_GetObjectItem(req, "id");
-  if (!id)
-  {
-    XLOG_ERROR("request doesn't contain id");
-    // TODO
-  }
-
-  jsonRpcFunction func = jsonRpc_findFunction(method->valuestring);
-  if (func)
-  {
-    cJSON* temp = cJSON_CreateObject();
-    cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString("2.0"));
-    cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(id->valueint));
-
-    int ret = func(req, &response);
-    if (ret)
-      cJSON_AddItemToObject(temp, "error", response);
-    else
-      cJSON_AddItemToObject(temp, "result", response);
-
-    *res = temp;
-  }
-  else
-  {
-    XLOG_ERROR("failed to find registered function %s", method->valuestring);
-  }
 }
 
 void rpcServer_init()

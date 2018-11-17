@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+#include "defs.h"
 #include "wpaControl.h"
 #include "xLog.h"
 #include "jsonRpc.h"
@@ -32,8 +33,6 @@
 #include <build_config.h>
 #include <wpa_ctrl.h>
 #include <cJSON.h>
-
-#define UNUSED_PARAM(X) UNUSED_ ## X __attribute__((__unused__))
 
 static struct wpa_ctrl* wpa_request = nullptr;
 static void* wpa_notify_read(void* argp);
