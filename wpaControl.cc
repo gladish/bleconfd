@@ -30,7 +30,6 @@
 #include <queue>
 #include <pthread.h>
 
-#include <build_config.h>
 #include <wpa_ctrl.h>
 #include <cJSON.h>
 

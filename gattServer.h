@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <queue>
 
 extern "C" 
@@ -40,9 +41,20 @@ public:
   GattClient(int fd);
   ~GattClient();
 
+  struct DeviceInfoProvider
+  {
+    std::function< std::string () > get_system_id;
+    std::function< std::string () > get_model_number;
+    std::function< std::string () > get_serial_number;
+    std::function< std::string () > get_firmware_revision;
+    std::function< std::string () > get_hardware_revision;
+    std::function< std::string () > get_software_revision;
+    std::function< std::string () > get_manufacturer_name;
+  };
+
   using data_handler = std::function<void (cJSON* json)>;
 
-  void init();
+  void init(DeviceInfoProvider const& p);
   void run();
   void enqueueForSend(cJSON* json);
 
@@ -50,11 +62,28 @@ public:
     { m_data_handler = h; }
 
 private:
-  static void outgoingDataCallback(int fd, uint32_t events, void* argp);
+  static void onAsyncMessage(int fd, uint32_t events, void* argp);
   static void disconnectCallback(int err, void* argp);
 
+  static void onInboxWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att, void* argp);
+
+  static void onOutboxRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp);
+
 private:
-  void doSend();
+  void processOutgoingMessageQueue();
+  void buildGattDatabase();
+
+  void buildGapService();
+  void buildGattService();
+  void buildDeviceInfoService();
+  void addDeviceInfoCharacteristic(gatt_db_attribute* service, uint16_t id,
+    std::function<std::string ()> const& read_callback);
+  void buildJsonRpcService();
+
+  void onInboxWrite(uint32_t id, uint8_t const* data, uint16_t offset, size_t len);
+  void onOutboxRead(uint32_t id, uint16_t offset);
 
 private:
   int                 m_fd;
@@ -66,6 +95,10 @@ private:
   std::queue<cJSON *> m_outgoing_queue;
   std::mutex          m_mutex;
   data_handler        m_data_handler;
+  DeviceInfoProvider  m_dis_provider;
+  gatt_db_attribute*  m_inbox;
+  gatt_db_attribute*  m_outbox;
+  std::thread::id     m_mainloop_thread;
 };
 
 class GattServer
@@ -75,7 +108,7 @@ public:
   ~GattServer();
 
   void init();
-  std::shared_ptr<GattClient> accept();
+  std::shared_ptr<GattClient> accept(GattClient::DeviceInfoProvider const& p);
 
 private:
   int       m_listen_fd;

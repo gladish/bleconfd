@@ -17,6 +17,14 @@
 #define __WPA_CONTROL_H__
 
 #include <cJSON.h>
+#include <string>
+
+class WpaClient
+{
+public:
+  WpaClient(std::string const& control_socket);
+  ~WpaClient();
+};
 
 int wpaControl_init(char const* control_socket);
 int wpaControl_shutdown();

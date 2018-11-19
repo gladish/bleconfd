@@ -20,9 +20,98 @@
 #include "xLog.h"
 
 #include <getopt.h>
+#include <fstream>
+#include <iostream>
+#include <string>
 
 namespace
 {
+  std::string PROC_getVariable(char const* file, char const* field)
+  {
+    std::string line;
+    std::ifstream in(file);
+    while (std::getline(in, line))
+    {
+      if (line.compare(0, strlen(field), field) == 0)
+      {
+        size_t idx = line.find(':');
+        if (idx != std::string::npos)
+          line = line.substr(idx + 1);
+
+        idx = 0;
+        while (idx < line.length() && line[idx] == ' ')
+          line = line.substr(1);
+
+        return line;
+      }
+    }
+
+    return std::string();
+  }
+
+  std::string DIS_getSystemId()
+  {
+    // TODO
+    return std::string();
+  }
+
+  std::string DIS_getModelNumber()
+  {
+    // TODO
+    return std::string();
+  }
+
+  std::string DIS_getSerialNumber()
+  {
+    return PROC_getVariable("/proc/cpuinfo", "Serial");
+  }
+
+  std::string DIS_getFirmwareRevision()
+  {
+    // TODO
+    return std::string();
+  }
+
+  std::string DIS_getHardwareRevision()
+  {
+    return PROC_getVariable("/proc/cpuinfo", "Revision");
+  }
+
+  std::string DIS_getSoftwareRevision()
+  {
+    return std::string();
+  }
+
+  std::string DIS_getManufacturerName()
+  {
+    // TODO
+    return std::string();
+  }
+
+  GattClient::DeviceInfoProvider disProvider =
+  {
+    DIS_getSystemId,
+    DIS_getModelNumber,
+    DIS_getSerialNumber,
+    DIS_getFirmwareRevision,
+    DIS_getHardwareRevision,
+    DIS_getSoftwareRevision,
+    DIS_getManufacturerName
+  };
+
+  class cJSON_Deleter
+  {
+  public:
+    cJSON_Deleter(cJSON* j) : m_json(j) { }
+    ~cJSON_Deleter()
+    {
+      if (m_json)
+        cJSON_Delete(m_json);
+    }
+  private:
+    cJSON* m_json;
+  };
+
   class RpcDispatcher
   {
   public:
@@ -33,12 +122,15 @@ namespace
 
     void onIncomingMessage(cJSON* req)
     {
+      #if 0
       char* s = cJSON_Print(req);
       if (s)
       {
         XLOG_DEBUG("incoming request\n\t%s", s);
         free(s);
       }
+      #endif
+      cJSON_Deleter req_deleter(req);
 
       cJSON* response = nullptr;
       cJSON* method = cJSON_GetObjectItem(req, "method");
@@ -55,28 +147,26 @@ namespace
         // TODO
       }
 
-      jsonRpcFunction func = jsonRpc_findFunction(method->valuestring);
-      if (func)
-      {
-        cJSON* temp = cJSON_CreateObject();
-        cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString("2.0"));
-        cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(id->valueint));
-
-        int ret = func(req, &response);
-        if (ret)
-          cJSON_AddItemToObject(temp, "error", response);
-        else
-          cJSON_AddItemToObject(temp, "result", response);
-      }
-      else
-      {
-        XLOG_ERROR("failed to find registered function %s", method->valuestring);
-      }
-
-      cJSON_Delete(req);
-
       try
       {
+        jsonRpcFunction func = jsonRpc_findFunction(method->valuestring);
+        if (func)
+        {
+          cJSON* temp = cJSON_CreateObject();
+          cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString("2.0"));
+          cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(id->valueint));
+
+          int ret = func(req, &response);
+          if (ret)
+            cJSON_AddItemToObject(temp, "error", response);
+          else
+            cJSON_AddItemToObject(temp, "result", response);
+        }
+        else
+        {
+          XLOG_ERROR("failed to find registered function %s", method->valuestring);
+        }
+
         m_client->enqueueForSend(response);
       }
       catch (std::exception const& err)
@@ -101,6 +191,8 @@ static cJSON* Test_appSettingsSet();
 int main(int argc, char* argv[])
 {
   std::string configFile = "bleconfd.ini";
+
+  return 0;
 
   while (true)
   {
@@ -137,7 +229,7 @@ int main(int argc, char* argv[])
     server.init();
 
     // blocks here until remote client makes BT connection
-    std::shared_ptr<GattClient> clnt = server.accept();
+    std::shared_ptr<GattClient> clnt = server.accept(disProvider);
     RpcDispatcher dispatcher(clnt);
 
     // incoming messages get dispached here

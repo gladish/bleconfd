@@ -21,6 +21,7 @@
 #include <sstream>
 #include <vector>
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -35,7 +36,29 @@ extern "C"
 
 namespace
 {
-  std::string const kOutgoingDataMessage { "outgoing-data" };
+  uint16_t const kUuidDeviceInfoService   {0x180a};
+
+  uint16_t const kUuidSystemId            {0x2a23};
+  uint16_t const kUuidModelNumber         {0x2a24};
+  uint16_t const kUuidSerialNumber        {0x2a25};
+  uint16_t const kUuidFirmwareRevision    {0x2a26};
+  uint16_t const kUuidHardwareRevision    {0x2a27};
+  uint16_t const kUuidSoftwareRevision    {0x2a28};
+  uint16_t const kUuidManufacturerName    {0x2a29};
+
+  std::string const kUuidRpcService       {"503553ca-eb90-11e8-ac5b-bb7e434023e8"};
+  std::string const kUuidRpcInbox         {"510c87c8-eb90-11e8-b3dc-17292c2ecc2d"};
+  std::string const kUuidRpcOutbox        {"5140f882-eb90-11e8-a835-13d2bd922d3f"};
+
+  std::string const kOutgoingDataMessage  {"outgoing-data"};
+
+  void DIS_writeCallack(gatt_db_attribute* UNUSED_PARAM(attr), int err, void* UNUSED_PARAM(argp))
+  {
+    if (err)
+    {
+      XLOG_WARN("error writing to DIS service in GATT db. %d", err);
+    }
+  }
 
   void throw_errno(int err, char const* fmt, ...)
     __attribute__ ((format (printf, 2, 3)));
@@ -126,7 +149,7 @@ GattServer::init()
 }
 
 std::shared_ptr<GattClient>
-GattServer::accept()
+GattServer::accept(GattClient::DeviceInfoProvider const& p)
 {
   mainloop_init();
 
@@ -143,14 +166,15 @@ GattServer::accept()
   XLOG_INFO("accepting remote connection from:%s", remote_address);
 
   std::shared_ptr<GattClient> clnt(new GattClient(soc));
-  clnt->init();
+  clnt->init(p);
 
   return clnt;
 }
 
 void
-GattClient::init()
+GattClient::init(DeviceInfoProvider const& p)
 {
+  m_dis_provider = p;
   m_att = bt_att_new(m_fd, 0);
   bt_att_set_close_on_unref(m_att, true);
   bt_att_register_disconnect(m_att, &GattClient::disconnectCallback, this, nullptr);
@@ -167,11 +191,141 @@ GattClient::init()
   if (ret < 0)
     throw_errno(errno, "failed to create notification pipe");
 
-  mainloop_add_fd(m_pipe[0], EPOLLIN, &GattClient::outgoingDataCallback, this, nullptr);
+  mainloop_add_fd(m_pipe[0], EPOLLIN, &GattClient::onAsyncMessage, this, nullptr);
+  buildGattDatabase();
 }
 
 void
-GattClient::outgoingDataCallback(int fd, uint32_t UNUSED_PARAM(events), void* argp)
+GattClient::buildGattDatabase()
+{
+  buildGapService();
+  buildGattService();
+  buildDeviceInfoService();
+  buildJsonRpcService();
+}
+
+void
+GattClient::buildJsonRpcService()
+{
+  bt_uuid_t uuid;
+
+  bt_string_to_uuid(&uuid, kUuidRpcService.c_str());
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 2);
+  // gatt_db_attribute_get_handle(service); do we need this handle?
+
+  // inbox
+  bt_string_to_uuid(&uuid, kUuidRpcInbox.c_str());
+  m_inbox = gatt_db_service_add_characteristic(
+    service,
+    &uuid,
+    BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
+    BT_GATT_CHRC_PROP_WRITE,
+    nullptr,
+    &GattClient::onInboxWrite, // remote client is writing to inbox
+    this);
+
+  // outbox
+  bt_string_to_uuid(&uuid, kUuidRpcOutbox.c_str());
+  m_outbox = gatt_db_service_add_characteristic(
+    service,
+    &uuid,
+    BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
+    BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_NOTIFY,
+    &GattClient::onOutboxRead, // remote client is reading from outbox
+    nullptr,
+    this);
+}
+
+void
+GattClient::onInboxWrite(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
+  uint16_t offset, uint8_t const* data, size_t len, uint8_t UNUSED_PARAM(opcode),
+  bt_att* UNUSED_PARAM(att), void* argp)
+{
+  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+  clnt->onInboxWrite(id, data, offset, len);
+}
+
+void
+GattClient::onInboxWrite(uint32_t id, uint8_t const* data, uint16_t offset, size_t len)
+{
+  // TODO client is writing data into inbox
+}
+
+void
+GattClient::onOutboxRead(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
+  uint16_t offset, uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
+{
+  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+  clnt->onOutboxRead(id, offset);
+}
+
+void
+GattClient::onOutboxRead(uint32_t id, uint16_t offset)
+{
+  // TODO: client is reading from inbox
+}
+
+void
+GattClient::buildGapService()
+{
+  static const uint16_t kUuidGap = 0x1800;
+  // TODO: why do we need this?
+}
+
+void
+GattClient::buildGattService()
+{
+  static const uint16_t kUuidGatt = 0x1801;
+  // TODO: why do we need this?
+}
+
+void
+GattClient::addDeviceInfoCharacteristic(
+  gatt_db_attribute* service,
+  uint16_t           id,
+  std::function< std::string () > const& read_callback)
+{
+  bt_uuid_t uuid;
+  bt_uuid16_create(&uuid, id);
+
+  gatt_db_attribute* attr = gatt_db_service_add_characteristic(service, &uuid, BT_ATT_PERM_READ,
+    BT_GATT_CHRC_PROP_READ, nullptr, nullptr, this);
+  if (!attr)
+  {
+    // TODO
+  }
+
+  std::string value;
+  if (read_callback)
+    value = read_callback();
+
+  uint8_t const* p = reinterpret_cast<uint8_t const *>(value.c_str());
+
+  // I'm not sure whether i like this or just having callbacks setup for reads
+  gatt_db_attribute_write(attr, 0, p, value.length(), BT_ATT_OP_WRITE_REQ, nullptr,
+      &DIS_writeCallack, nullptr);
+}
+
+void
+GattClient::buildDeviceInfoService()
+{
+  bt_uuid_t uuid;
+  gatt_db_attribute* service = nullptr;
+
+  bt_uuid16_create(&uuid, kUuidDeviceInfoService);
+  service = gatt_db_add_service(m_db, &uuid, true, 14); // what's the 14?
+
+  addDeviceInfoCharacteristic(service, kUuidSystemId, m_dis_provider.get_system_id);
+  addDeviceInfoCharacteristic(service, kUuidModelNumber, m_dis_provider.get_model_number);
+  addDeviceInfoCharacteristic(service, kUuidSerialNumber, m_dis_provider.get_serial_number);
+  addDeviceInfoCharacteristic(service, kUuidFirmwareRevision, m_dis_provider.get_firmware_revision);
+  addDeviceInfoCharacteristic(service, kUuidHardwareRevision, m_dis_provider.get_hardware_revision);
+  addDeviceInfoCharacteristic(service, kUuidSoftwareRevision, m_dis_provider.get_software_revision);
+  addDeviceInfoCharacteristic(service, kUuidManufacturerName, m_dis_provider.get_manufacturer_name);
+}
+
+void
+GattClient::onAsyncMessage(int fd, uint32_t UNUSED_PARAM(events), void* argp)
 {
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
 
@@ -186,7 +340,7 @@ GattClient::outgoingDataCallback(int fd, uint32_t UNUSED_PARAM(events), void* ar
 
   if (strcmp(buff, kOutgoingDataMessage.c_str()) == 0)
   {
-    clnt->doSend();
+    clnt->processOutgoingMessageQueue();
   }
   else
   {
@@ -197,14 +351,19 @@ GattClient::outgoingDataCallback(int fd, uint32_t UNUSED_PARAM(events), void* ar
 void
 GattClient::run()
 {
+  m_mainloop_thread = std::this_thread::get_id();
+
   // Is there any way to use glib mainloop? we're using the bluez
   // built-in event loop
   mainloop_run();
 }
 
 void
-GattClient::doSend()
+GattClient::processOutgoingMessageQueue()
 {
+  // This should be on the mainloop_ run() thread
+  assert( std::this_thread::get_id() == m_mainloop_thread );
+
   cJSON* next_outgoing_message = nullptr;
 
   while (true)
@@ -226,7 +385,7 @@ GattClient::doSend()
         // TODO: split message using a function of the mtu. @see m_mtu. There's
         // also a way to query the att layer for the current mtu size. Account
         // for the 4-byte header, split payload into chunks, and then send
-        // them all
+        // them all as notify to the outbox
       }
       cJSON_Delete(next_outgoing_message);
     }
