@@ -16,6 +16,11 @@
 #ifndef __BLECONFD_DEFS_H__
 #define __BLECONFD_DEFS_H__
 
+#include <functional>
+#include <cJSON.h>
+
 #define UNUSED_PARAM(X) UNUSED_ ## X __attribute__((__unused__))
+
+using ResponseSender = std::function< void (cJSON* res) >;
 
 #endif

@@ -71,6 +71,21 @@ private:
   static void onOutboxRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t opcode, bt_att* att, void* argp);
 
+  static void onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp);
+
+  static void onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opecode, bt_att* att, void* argp);
+
+  static void onServiceChanged(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp);
+
+  static void onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp);
+
+  static void onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* value, size_t len, uint8_t opcode, bt_att* att, void* argp);
+
 private:
   void processOutgoingMessageQueue();
   void buildGattDatabase();
@@ -99,6 +114,7 @@ private:
   gatt_db_attribute*  m_inbox;
   gatt_db_attribute*  m_outbox;
   std::thread::id     m_mainloop_thread;
+  bool                m_service_change_enabled;
 };
 
 class GattServer

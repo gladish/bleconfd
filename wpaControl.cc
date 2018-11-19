@@ -40,12 +40,18 @@ static pthread_t wpa_notify_thread;
 
 static cJSON* wpaControl_createResponse(std::string const& s);
 static cJSON* wpaControl_createError(int err);
+static ResponseSender enqueue_async_message = nullptr;
 
 int
-wpaControl_init(char const* control_socket)
+wpaControl_init(char const* control_socket, ResponseSender const& sender)
 {
   if (!control_socket)
     return EINVAL;
+
+  if (!sender)
+    return EINVAL;
+
+  enqueue_async_message = sender;
 
   std::string         wpa_socket_name = control_socket;
   struct wpa_ctrl*    wpa_notify = nullptr;

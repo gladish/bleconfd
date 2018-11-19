@@ -16,8 +16,8 @@
 #ifndef __WPA_CONTROL_H__
 #define __WPA_CONTROL_H__
 
-#include <cJSON.h>
 #include <string>
+#include "defs.h"
 
 class WpaClient
 {
@@ -26,7 +26,7 @@ public:
   ~WpaClient();
 };
 
-int wpaControl_init(char const* control_socket);
+int wpaControl_init(char const* control_socket, ResponseSender const& sender);
 int wpaControl_shutdown();
 
 // rpc functions

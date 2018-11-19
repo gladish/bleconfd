@@ -115,9 +115,36 @@ namespace
   class RpcDispatcher
   {
   public:
-    RpcDispatcher(std::shared_ptr<GattClient> const& clnt)
-      : m_client(clnt)
+    RpcDispatcher()
     {
+    }
+
+    void setClient(std::shared_ptr<GattClient> const& clnt)
+    {
+      std::lock_guard<std::mutex> guard(m_mutex);
+      m_client = clnt;
+      m_client->setDataHandler(std::bind(&RpcDispatcher::onIncomingMessage, this,
+        std::placeholders::_1));
+    }
+
+    void stop()
+    {
+      std::lock_guard<std::mutex> guard(m_mutex);
+      m_client.reset();
+    }
+
+    void run()
+    {
+      // blocks here until client disconnects
+      m_client->run();
+      stop();
+    }
+
+    void enqueueAsyncMessage(cJSON* json)
+    {
+      std::lock_guard<std::mutex> guard(m_mutex);
+      if (m_client)
+        m_client->enqueueForSend(json);
     }
 
     void onIncomingMessage(cJSON* req)
@@ -167,7 +194,9 @@ namespace
           XLOG_ERROR("failed to find registered function %s", method->valuestring);
         }
 
-        m_client->enqueueForSend(response);
+        std::lock_guard<std::mutex> guard(m_mutex);
+        if (m_client)
+          m_client->enqueueForSend(response);
       }
       catch (std::exception const& err)
       {
@@ -175,12 +204,19 @@ namespace
       }
     }
 
+    void registerRpcFunctions()
+    {
+      jsonRpc_insertFunction("wifi-connect", wpaControl_connectToNetwork);
+      jsonRpc_insertFunction("wifi-get-status", wpaControl_getStatus);
+      jsonRpc_insertFunction("app-settings-get", appSettings_get);
+      jsonRpc_insertFunction("app-settings-set", appSettings_set);
+    }
+
   private:
     std::shared_ptr<GattClient> m_client; 
+    std::mutex                  m_mutex;
   };
 }
-
-static void rpcServer_init();
 
 // TODO: proper test framework
 static cJSON* Test_wifiConnect();
@@ -219,8 +255,11 @@ int main(int argc, char* argv[])
 
   xLog::getLogger().setLevel(logLevel_Debug);
 
-  rpcServer_init();
-  wpaControl_init("/var/run/wpa_supplicant/wlan1");
+  RpcDispatcher rpc_dispatcher;
+  rpc_dispatcher.registerRpcFunctions();
+
+  wpaControl_init("/var/run/wpa_supplicant/wlan1", std::bind(&RpcDispatcher::enqueueAsyncMessage,
+    &rpc_dispatcher, std::placeholders::_1));
   appSettings_init(configFile.c_str());
 
   try
@@ -230,14 +269,8 @@ int main(int argc, char* argv[])
 
     // blocks here until remote client makes BT connection
     std::shared_ptr<GattClient> clnt = server.accept(disProvider);
-    RpcDispatcher dispatcher(clnt);
-
-    // incoming messages get dispached here
-    clnt->setDataHandler(std::bind(&RpcDispatcher::onIncomingMessage, &dispatcher,
-      std::placeholders::_1));
-
-    // blocks inside run until client disconnects
-    clnt->run();
+    rpc_dispatcher.setClient(clnt);
+    rpc_dispatcher.run();
   }
   catch (std::runtime_error const& err)
   {
@@ -265,14 +298,6 @@ int main(int argc, char* argv[])
 
   wpaControl_shutdown();
   return 0;
-}
-
-void rpcServer_init()
-{
-  jsonRpc_insertFunction("wifi-connect", wpaControl_connectToNetwork);
-  jsonRpc_insertFunction("wifi-get-status", wpaControl_getStatus);
-  jsonRpc_insertFunction("app-settings-get", appSettings_get);
-  jsonRpc_insertFunction("app-settings-set", appSettings_set);
 }
 
 cJSON* Test_wifiConnect()

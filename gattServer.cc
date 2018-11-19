@@ -37,6 +37,8 @@ extern "C"
 namespace
 {
   uint16_t const kUuidDeviceInfoService   {0x180a};
+  static const uint16_t kUuidGap          {0x1800};
+  static const uint16_t kUuidGatt         {0x1801};
 
   uint16_t const kUuidSystemId            {0x2a23};
   uint16_t const kUuidModelNumber         {0x2a24};
@@ -52,7 +54,7 @@ namespace
 
   std::string const kOutgoingDataMessage  {"outgoing-data"};
 
-  void DIS_writeCallack(gatt_db_attribute* UNUSED_PARAM(attr), int err, void* UNUSED_PARAM(argp))
+  void DIS_writeCallback(gatt_db_attribute* UNUSED_PARAM(attr), int err, void* UNUSED_PARAM(argp))
   {
     if (err)
     {
@@ -234,6 +236,8 @@ GattClient::buildJsonRpcService()
     &GattClient::onOutboxRead, // remote client is reading from outbox
     nullptr,
     this);
+
+  gatt_db_service_set_active(service, true);
 }
 
 void
@@ -268,15 +272,115 @@ GattClient::onOutboxRead(uint32_t id, uint16_t offset)
 void
 GattClient::buildGapService()
 {
-  static const uint16_t kUuidGap = 0x1800;
-  // TODO: why do we need this?
+  bt_uuid_t uuid;
+  bt_uuid16_create(&uuid, kUuidGap);
+
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 6);
+
+  // device name
+  bt_uuid16_create(&uuid, GATT_CHARAC_DEVICE_NAME);
+  gatt_db_service_add_characteristic(service, &uuid, BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
+    BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_EXT_PROP,
+    &GattClient::onGapRead, &GattClient::onGapWrite, this);
+
+  bt_uuid16_create(&uuid, GATT_CHARAC_EXT_PROPER_UUID);
+  gatt_db_service_add_descriptor(service, &uuid, BT_ATT_PERM_READ,
+    nullptr, nullptr, this);
+
+  // appearance
+  bt_uuid16_create(&uuid, GATT_CHARAC_APPEARANCE);
+  gatt_db_attribute* attr = gatt_db_service_add_characteristic(service, &uuid, BT_ATT_PERM_READ,
+    BT_GATT_CHRC_PROP_READ, nullptr, nullptr, this);
+
+  uint16_t appearance {0};
+  bt_put_le16(128, &appearance);
+  gatt_db_attribute_write(attr, 0, reinterpret_cast<uint8_t const *>(&appearance),
+      sizeof(appearance), BT_ATT_OP_WRITE_REQ, nullptr, &DIS_writeCallback, nullptr);
+
+  gatt_db_service_set_active(service, true);
+}
+
+void
+GattClient::onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp)
+{
+  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+  // TODO:
+}
+
+void
+GattClient::onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opecode, bt_att* att, void* argp)
+{
+  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+  // TODO:
+}
+
+void
+GattClient::onServiceChanged(gatt_db_attribute* attr, uint32_t id, uint16_t UNUSED_PARAM(offset),
+    uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* UNUSED_PARAM(argp))
+{
+  XLOG_INFO("onServiceChanged");
+  gatt_db_attribute_read_result(attr, id, 0, nullptr, 0);
 }
 
 void
 GattClient::buildGattService()
 {
-  static const uint16_t kUuidGatt = 0x1801;
-  // TODO: why do we need this?
+  bt_uuid_t uuid;
+  bt_uuid16_create(&uuid, kUuidGatt);
+
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 4);
+
+  bt_uuid16_create(&uuid, GATT_CHARAC_SERVICE_CHANGED);
+  gatt_db_service_add_characteristic(service, &uuid, BT_ATT_PERM_READ,
+      BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_INDICATE,
+      GattClient::onServiceChanged, nullptr, this);
+
+  bt_uuid16_create(&uuid, GATT_CLIENT_CHARAC_CFG_UUID);
+  gatt_db_service_add_descriptor(service, &uuid, BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
+      GattClient::onServiceChangedRead, GattClient::onServiceChangedWrite, this);
+
+  gatt_db_service_set_active(service, true);
+}
+
+void
+GattClient::onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t UNUSED_PARAM(offset),
+  uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
+{
+  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+
+  uint8_t value[2] {0x00, 0x00};
+  if (clnt->m_service_change_enabled)
+    value[0] = 0x02;
+  gatt_db_attribute_read_result(attr, id, 0, value, sizeof(value));
+}
+
+void
+GattClient::onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* value, size_t len,
+    uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
+{
+  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+
+  uint8_t ecode = 0;
+  if (!value || (len != 2))
+    ecode = BT_ATT_ERROR_INVALID_ATTRIBUTE_VALUE_LEN;
+
+  if (!ecode && offset)
+    ecode = BT_ATT_ERROR_INVALID_OFFSET;
+
+  if (!ecode)
+  {
+    if (value[0] == 0x00)
+      clnt->m_service_change_enabled = false;
+    else if (value[0] == 0x02)
+      clnt->m_service_change_enabled = true;
+    else
+      ecode = 0x80;
+  }
+
+  gatt_db_attribute_write_result(attr, id, ecode);
 }
 
 void
@@ -303,17 +407,16 @@ GattClient::addDeviceInfoCharacteristic(
 
   // I'm not sure whether i like this or just having callbacks setup for reads
   gatt_db_attribute_write(attr, 0, p, value.length(), BT_ATT_OP_WRITE_REQ, nullptr,
-      &DIS_writeCallack, nullptr);
+      &DIS_writeCallback, nullptr);
 }
 
 void
 GattClient::buildDeviceInfoService()
 {
   bt_uuid_t uuid;
-  gatt_db_attribute* service = nullptr;
-
   bt_uuid16_create(&uuid, kUuidDeviceInfoService);
-  service = gatt_db_add_service(m_db, &uuid, true, 14); // what's the 14?
+
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 14); // what's the 14?
 
   addDeviceInfoCharacteristic(service, kUuidSystemId, m_dis_provider.get_system_id);
   addDeviceInfoCharacteristic(service, kUuidModelNumber, m_dis_provider.get_model_number);
@@ -322,6 +425,8 @@ GattClient::buildDeviceInfoService()
   addDeviceInfoCharacteristic(service, kUuidHardwareRevision, m_dis_provider.get_hardware_revision);
   addDeviceInfoCharacteristic(service, kUuidSoftwareRevision, m_dis_provider.get_software_revision);
   addDeviceInfoCharacteristic(service, kUuidManufacturerName, m_dis_provider.get_manufacturer_name);
+
+  gatt_db_service_set_active(service, true);
 }
 
 void
@@ -394,6 +499,7 @@ GattClient::processOutgoingMessageQueue()
 
 GattClient::GattClient(int fd)
   : m_fd(fd)
+  , m_service_change_enabled(false)
 {
 }
 
