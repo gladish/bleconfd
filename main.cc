@@ -228,8 +228,6 @@ int main(int argc, char* argv[])
 {
   std::string configFile = "bleconfd.ini";
 
-  return 0;
-
   while (true)
   {
     static struct option longOptions[] = 
@@ -262,20 +260,23 @@ int main(int argc, char* argv[])
     &rpc_dispatcher, std::placeholders::_1));
   appSettings_init(configFile.c_str());
 
-  try
+  while (true)
   {
-    GattServer server;
-    server.init();
+    try
+    {
+      GattServer server;
+      server.init();
 
-    // blocks here until remote client makes BT connection
-    std::shared_ptr<GattClient> clnt = server.accept(disProvider);
-    rpc_dispatcher.setClient(clnt);
-    rpc_dispatcher.run();
-  }
-  catch (std::runtime_error const& err)
-  {
-    XLOG_ERROR("unhandled exception:%s", err.what());
-    return -1;
+      // blocks here until remote client makes BT connection
+      std::shared_ptr<GattClient> clnt = server.accept(disProvider);
+      rpc_dispatcher.setClient(clnt);
+      rpc_dispatcher.run();
+    }
+    catch (std::runtime_error const& err)
+    {
+      XLOG_ERROR("unhandled exception:%s", err.what());
+      return -1;
+    }
   }
 
 #if 0

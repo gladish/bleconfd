@@ -103,7 +103,9 @@ namespace
     if (p && strlen(p) > 0)
       out << p;
 
-    throw std::runtime_error(out.str());
+    std::string message(out.str());
+    XLOG_ERROR("exception:%s", message.c_str());
+    throw std::runtime_error(message);
   }
 }
 
@@ -158,6 +160,8 @@ GattServer::accept(GattClient::DeviceInfoProvider const& p)
   sockaddr_l2 peer_addr;
   memset(&peer_addr, 0, sizeof(peer_addr));
 
+  XLOG_INFO("waiting for incoming BLE connections");
+
   socklen_t n = sizeof(peer_addr);
   int soc = ::accept(m_listen_fd, reinterpret_cast<sockaddr *>(&peer_addr), &n);
   if (soc < 0)
@@ -165,7 +169,7 @@ GattServer::accept(GattClient::DeviceInfoProvider const& p)
 
   char remote_address[64] = {0};
   ba2str(&peer_addr.l2_bdaddr, remote_address);
-  XLOG_INFO("accepting remote connection from:%s", remote_address);
+  XLOG_INFO("accepted remote connection from:%s", remote_address);
 
   std::shared_ptr<GattClient> clnt(new GattClient(soc));
   clnt->init(p);
@@ -304,6 +308,7 @@ void
 GattClient::onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t opcode, bt_att* att, void* argp)
 {
+  XLOG_DEBUG("onGapRead %04x", id);
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
   // TODO:
 }
@@ -312,6 +317,7 @@ void
 GattClient::onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t const* data, size_t len, uint8_t opecode, bt_att* att, void* argp)
 {
+  XLOG_DEBUG("onGapWrite");
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
   // TODO:
 }
@@ -320,7 +326,7 @@ void
 GattClient::onServiceChanged(gatt_db_attribute* attr, uint32_t id, uint16_t UNUSED_PARAM(offset),
     uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* UNUSED_PARAM(argp))
 {
-  XLOG_INFO("onServiceChanged");
+  XLOG_DEBUG("onServiceChanged");
   gatt_db_attribute_read_result(attr, id, 0, nullptr, 0);
 }
 
@@ -348,6 +354,7 @@ void
 GattClient::onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t UNUSED_PARAM(offset),
   uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
 {
+  XLOG_DEBUG("onServiceChangedRead");
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
 
   uint8_t value[2] {0x00, 0x00};
@@ -361,6 +368,7 @@ GattClient::onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t
     uint8_t const* value, size_t len,
     uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
 {
+  XLOG_DEBUG("onServiceChangeWrite");
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
 
   uint8_t ecode = 0;
