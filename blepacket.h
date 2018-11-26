@@ -17,6 +17,7 @@
 #define __BLE_PACKET_H__
 
 #include <stdint.h>
+#include <vector>
 
 class BLEPacket
 {
@@ -36,6 +37,18 @@ public:
     int             m_header;
     int             m_length;
     int             m_fragment_size;
+  };
+
+  class Assembler
+  {
+  public:
+    Assembler();
+
+  public:
+    BLEPacket* appendData(uint8_t const* data, int n);
+
+  private:
+    std::vector<uint8_t *> m_data;
   };
 
 public:

@@ -219,25 +219,25 @@ GattClient::buildJsonRpcService()
   gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 2);
   // gatt_db_attribute_get_handle(service); do we need this handle?
 
-  // inbox
+  // data channel
   bt_string_to_uuid(&uuid, kUuidRpcInbox.c_str());
-  m_inbox = gatt_db_service_add_characteristic(
+  m_data_channel = gatt_db_service_add_characteristic(
     service,
     &uuid,
     BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
     BT_GATT_CHRC_PROP_WRITE,
-    nullptr,
-    &GattClient::onInboxWrite, // remote client is writing to inbox
+    &GattClient::onDataChannelOut,  // remote client is reading 
+    &GattClient::onDataChannelIn,   // remote client is writing 
     this);
 
   // outbox
   bt_string_to_uuid(&uuid, kUuidRpcOutbox.c_str());
-  m_outbox = gatt_db_service_add_characteristic(
+  m_blepoll = gatt_db_service_add_characteristic(
     service,
     &uuid,
     BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
     BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_NOTIFY,
-    &GattClient::onOutboxRead, // remote client is reading from outbox
+    nullptr,
     nullptr,
     this);
 
@@ -245,30 +245,30 @@ GattClient::buildJsonRpcService()
 }
 
 void
-GattClient::onInboxWrite(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
+GattClient::onDataChannelIn(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
   uint16_t offset, uint8_t const* data, size_t len, uint8_t UNUSED_PARAM(opcode),
   bt_att* UNUSED_PARAM(att), void* argp)
 {
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
-  clnt->onInboxWrite(id, data, offset, len);
+  clnt->onDataChannelIn(id, data, offset, len);
 }
 
 void
-GattClient::onInboxWrite(uint32_t id, uint8_t const* data, uint16_t offset, size_t len)
+GattClient::onDataChannelIn(uint32_t id, uint8_t const* data, uint16_t offset, size_t len)
 {
   // TODO client is writing data into inbox
 }
 
 void
-GattClient::onOutboxRead(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
+GattClient::onDataChannelOut(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
   uint16_t offset, uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
 {
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
-  clnt->onOutboxRead(id, offset);
+  clnt->onDataChannelOut(id, offset);
 }
 
 void
-GattClient::onOutboxRead(uint32_t id, uint16_t offset)
+GattClient::onDataChannelOut(uint32_t id, uint16_t offset)
 {
   // TODO: client is reading from inbox
 }

@@ -65,10 +65,10 @@ private:
   static void onAsyncMessage(int fd, uint32_t events, void* argp);
   static void disconnectCallback(int err, void* argp);
 
-  static void onInboxWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+  static void onDataChannelIn(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t const* data, size_t len, uint8_t opcode, bt_att* att, void* argp);
 
-  static void onOutboxRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+  static void onDataChannelOut(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t opcode, bt_att* att, void* argp);
 
   static void onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
@@ -97,8 +97,8 @@ private:
     std::function<std::string ()> const& read_callback);
   void buildJsonRpcService();
 
-  void onInboxWrite(uint32_t id, uint8_t const* data, uint16_t offset, size_t len);
-  void onOutboxRead(uint32_t id, uint16_t offset);
+  void onDataChannelIn(uint32_t id, uint8_t const* data, uint16_t offset, size_t len);
+  void onDataChannelOut(uint32_t id, uint16_t offset);
 
 private:
   int                 m_fd;
@@ -111,8 +111,8 @@ private:
   std::mutex          m_mutex;
   data_handler        m_data_handler;
   DeviceInfoProvider  m_dis_provider;
-  gatt_db_attribute*  m_inbox;
-  gatt_db_attribute*  m_outbox;
+  gatt_db_attribute*  m_data_channel;
+  gatt_db_attribute*  m_blepoll;
   std::thread::id     m_mainloop_thread;
   bool                m_service_change_enabled;
 };

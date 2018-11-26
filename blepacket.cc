@@ -124,3 +124,23 @@ BLEPacket::printFrame(uint8_t* frame)
   printHeader(*header);
   printf(" PKT:%.*s\n", frameLengthFromHeader(*header), (char *) (frame + 4));
 }
+
+BLEPacket::Assembler::Assembler()
+{
+}
+
+BLEPacket*
+BLEPacket::Assembler::appendData(uint8_t const* data, int n)
+{
+  assert(data != nullptr);
+  assert(n >= 4);
+
+  // TODO: we expect [4][payload]
+  // 4 byte header + payload.
+  // It's possible that client could write
+  // [4][payload.len(128) bytes of data, which means we'll get the header
+  // once and then a bunch of callbacks with data
+  // We need to keep a state variable to track whether we're reading a frame
+  // with a header or a continuation of the previous frame
+  return nullptr;
+}
