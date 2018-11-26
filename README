@@ -1,6 +1,6 @@
 BUILD
 
-1. Set thse three
+1. Set these three
 
 export HOSTAPD_HOME=/home/pi/work/hostap
 export BLUEZ_HOME=/home/pi/work/bluez-5.47

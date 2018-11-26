@@ -63,12 +63,22 @@ public:
     { m_data_handler = h; }
 
 private:
-  static void onAsyncMessage(int fd, uint32_t events, void* argp);
+  /**
+   * Callback to handle blepoll. We use a timeout for this. 
+   */
+  static void onTimeout(int fd, void* argp);
+
   static void disconnectCallback(int err, void* argp);
 
+  /**
+   * Callback to handle client writing data
+   */
   static void onDataChannelIn(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t const* data, size_t len, uint8_t opcode, bt_att* att, void* argp);
 
+  /**
+   * Callback to handle client reading
+   */
   static void onDataChannelOut(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t opcode, bt_att* att, void* argp);
 
@@ -88,7 +98,6 @@ private:
     uint8_t const* value, size_t len, uint8_t opcode, bt_att* att, void* argp);
 
 private:
-  void processOutgoingMessageQueue();
   void buildGattDatabase();
 
   void buildGapService();
@@ -100,13 +109,13 @@ private:
 
   void onDataChannelIn(uint32_t id, uint8_t const* data, uint16_t offset, size_t len);
   void onDataChannelOut(uint32_t id, uint16_t offset);
+  void onTimeout();
 
 private:
   int                 m_fd;
   bt_att*             m_att;
   gatt_db*            m_db;
   bt_gatt_server*     m_server;
-  int                 m_pipe[2];
   uint16_t            m_mtu;
   std::queue<cJSON *> m_outgoing_queue;
   std::mutex          m_mutex;
@@ -117,6 +126,8 @@ private:
   std::thread::id     m_mainloop_thread;
   bool                m_service_change_enabled;
   std::vector<char>   m_incoming_buff;
+  std::vector<char>   m_outgoing_buff;
+  int                 m_timeout_id;
 };
 
 class GattServer

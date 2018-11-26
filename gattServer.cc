@@ -194,11 +194,7 @@ GattClient::init(DeviceInfoProvider const& p)
     bt_gatt_server_set_debug(m_server, GATT_debugCallback, this, nullptr);
   }
 
-  int ret = pipe2(m_pipe, O_CLOEXEC);
-  if (ret < 0)
-    throw_errno(errno, "failed to create notification pipe");
-
-  mainloop_add_fd(m_pipe[0], EPOLLIN, &GattClient::onAsyncMessage, this, nullptr);
+  m_timeout_id = mainloop_add_timeout(1000, &GattClient::onTimeout, this, nullptr);
   buildGattDatabase();
 }
 
@@ -257,7 +253,7 @@ GattClient::onDataChannelIn(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
 void
 GattClient::onDataChannelIn(uint32_t UNUSED_PARAM(id), uint8_t const* data, uint16_t offset, size_t len)
 {
-  for (int i = 0; i < len; ++i)
+  for (size_t i = 0; i < len; ++i)
   {
     char c = static_cast<char>(data[i + offset]);
     m_incoming_buff.push_back(c);
@@ -282,7 +278,11 @@ GattClient::onDataChannelOut(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
 void
 GattClient::onDataChannelOut(uint32_t id, uint16_t offset)
 {
+  XLOG_INFO("onDataChannelOut%d, %u", id, offset);
+
   // TODO: client is reading from inbox
+
+  // TODO: how do we handle the offset?
 }
 
 void
@@ -322,6 +322,7 @@ GattClient::onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
 {
   XLOG_DEBUG("onGapRead %04x", id);
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+
   // TODO:
 }
 
@@ -331,6 +332,7 @@ GattClient::onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
 {
   XLOG_DEBUG("onGapWrite");
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+
   // TODO:
 }
 
@@ -414,6 +416,7 @@ GattClient::addDeviceInfoCharacteristic(
 
   gatt_db_attribute* attr = gatt_db_service_add_characteristic(service, &uuid, BT_ATT_PERM_READ,
     BT_GATT_CHRC_PROP_READ, nullptr, nullptr, this);
+
   if (!attr)
   {
     // TODO
@@ -450,26 +453,26 @@ GattClient::buildDeviceInfoService()
 }
 
 void
-GattClient::onAsyncMessage(int fd, uint32_t UNUSED_PARAM(events), void* argp)
+GattClient::onTimeout(int UNUSED_PARAM(id), void* argp)
 {
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+  clnt->onTimeout();
+}
 
-  char buff[64] = {0};
+void
+GattClient::onTimeout()
+{
+  bool pending_data = false;
 
-  int ret = read(fd, buff, sizeof(buff));
-  if (ret < 0)
   {
-    XLOG_ERROR("error reading from pipe:%s", strerror(errno));
-    return;
+    std::lock_guard<std::mutex> guard(m_mutex);
+    pending_data = !m_outgoing_queue.empty();
   }
 
-  if (strcmp(buff, kOutgoingDataMessage.c_str()) == 0)
+  if (pending_data)
   {
-    clnt->processOutgoingMessageQueue();
-  }
-  else
-  {
-    XLOG_WARN("unknown async message:%s", buff);
+    // TODO: do notification on blepoll. This signals client that there's 
+    // pending data
   }
 }
 
@@ -477,44 +480,7 @@ void
 GattClient::run()
 {
   m_mainloop_thread = std::this_thread::get_id();
-
-  // Is there any way to use glib mainloop? we're using the bluez
-  // built-in event loop
   mainloop_run();
-}
-
-void
-GattClient::processOutgoingMessageQueue()
-{
-  // This should be on the mainloop_ run() thread
-  assert( std::this_thread::get_id() == m_mainloop_thread );
-
-  cJSON* next_outgoing_message = nullptr;
-
-  while (true)
-  {
-    {
-      std::lock_guard<std::mutex> guard(m_mutex);
-      if (m_outgoing_queue.empty())
-        return;
-
-      next_outgoing_message = m_outgoing_queue.front();
-      m_outgoing_queue.pop();
-    }
-
-    if (next_outgoing_message)
-    {
-      char* payload = cJSON_PrintUnformatted(next_outgoing_message);
-      if (!payload)
-      {
-        // TODO: split message using a function of the mtu. @see m_mtu. There's
-        // also a way to query the att layer for the current mtu size. Account
-        // for the 4-byte header, split payload into chunks, and then send
-        // them all as notify to the outbox
-      }
-      cJSON_Delete(next_outgoing_message);
-    }
-  }
 }
 
 GattClient::GattClient(int fd)
@@ -522,7 +488,6 @@ GattClient::GattClient(int fd)
   , m_service_change_enabled(false)
 {
 }
-
 
 GattClient::~GattClient()
 {
@@ -542,13 +507,6 @@ GattClient::enqueueForSend(cJSON* json)
   {
     std::lock_guard<std::mutex> guard(m_mutex);
     m_outgoing_queue.push(json);
-  }
-
-  // signal mainloop_run() thread of pending outgoing message
-  int ret = write(m_pipe[1], kOutgoingDataMessage.c_str(), kOutgoingDataMessage.size());
-  if (ret < 0)
-  {
-    XLOG_WARN("write:%s", strerror(errno));
   }
 }
 
