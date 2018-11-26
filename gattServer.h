@@ -20,6 +20,7 @@
 #include <mutex>
 #include <thread>
 #include <queue>
+#include <vector>
 
 extern "C" 
 {
@@ -115,6 +116,7 @@ private:
   gatt_db_attribute*  m_blepoll;
   std::thread::id     m_mainloop_thread;
   bool                m_service_change_enabled;
+  std::vector<char>   m_incoming_buff;
 };
 
 class GattServer

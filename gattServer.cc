@@ -36,6 +36,7 @@ extern "C"
 
 namespace
 {
+  char const      kRecordDelimiter        {'\n'};
   uint16_t const kUuidDeviceInfoService   {0x180a};
   static const uint16_t kUuidGap          {0x1800};
   static const uint16_t kUuidGatt         {0x1801};
@@ -254,9 +255,20 @@ GattClient::onDataChannelIn(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
 }
 
 void
-GattClient::onDataChannelIn(uint32_t id, uint8_t const* data, uint16_t offset, size_t len)
+GattClient::onDataChannelIn(uint32_t UNUSED_PARAM(id), uint8_t const* data, uint16_t offset, size_t len)
 {
-  // TODO client is writing data into inbox
+  for (int i = 0; i < len; ++i)
+  {
+    char c = static_cast<char>(data[i + offset]);
+    m_incoming_buff.push_back(c);
+
+    if (c == kRecordDelimiter)
+    {
+      // TODO: dispatch
+
+      m_incoming_buff.clear();
+    }
+  }
 }
 
 void
