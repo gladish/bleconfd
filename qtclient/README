@@ -1,0 +1,7 @@
+
+To build, run:
+
+1.) qmake
+2.) makeA
+
+I'm using qt-5.11
