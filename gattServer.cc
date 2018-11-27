@@ -471,8 +471,18 @@ GattClient::onTimeout()
 
   if (pending_data)
   {
-    // TODO: do notification on blepoll. This signals client that there's 
-    // pending data
+    uint32_t num_bytes_remaining = 1;
+    uint16_t handle = gatt_db_attribute_get_handle(m_blepoll);
+    int ret = bt_gatt_server_send_notification(
+      m_server,
+      handle,
+      reinterpret_cast<uint8_t*>(&num_bytes_remaining),
+      sizeof(uint32_t));
+
+    if (ret)
+    {
+      XLOG_WARN("failed to send notification:%d", ret);
+    }
   }
 }
 
