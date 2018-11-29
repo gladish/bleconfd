@@ -41,7 +41,6 @@ private:
   void log(char const* format, ...) PRINTF_FORMAT(2, 3);
   void introspectNextService();
   void readNextCharacteristic();
-  void pollStatus();
   void configureDevice(QBluetoothAddress const& addr);
 
 private slots:
@@ -60,10 +59,6 @@ private:
   QList<QLowEnergyCharacteristic> m_discovered_chars;
   QList<QLowEnergyCharacteristic>::iterator m_chars_iterator;
   QString                         m_wifi_config;
-  QLowEnergyService*              m_rdk_service;
-  QLowEnergyCharacteristic        m_rdk_status_char;
-  QLowEnergyCharacteristic        m_rdk_wifi_char;
-  bool                            m_poll_status;
   QJsonObject                     m_json_info;
   QString                         m_xbo_account_id;
   QString                         m_client_secret;

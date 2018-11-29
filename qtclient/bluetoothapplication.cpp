@@ -14,13 +14,26 @@
 
 #include <iostream>
 
-static QBluetoothUuid const kRdkProvisionService = QBluetoothUuid(QString("8df5ad72-9bbc-4167-bcd9-e8eb9e4d671b"));
-static QBluetoothUuid const kRdkWiFiConfigCharacteristic = QBluetoothUuid(QString("b87a896b-4052-4cab-a7e7-a71594d9c353"));
-static QBluetoothUuid const kRdkPublicKeyCharacteristic = QBluetoothUuid(QString("cb9fee4d-c6ed-48c1-ab46-c3f2da38eedd"));
-static QBluetoothUuid const kRdkProvisionStateCharacteristic = QBluetoothUuid(QString("79defbc1-eb45-448d-9f2a-1ecc3a47a242"));
+// static QBluetoothUuid const kRdkPublicKeyCharacteristic = QBluetoothUuid(QString("cb9fee4d-c6ed-48c1-ab46-c3f2da38eedd"));
 
 
-static QBluetoothUuid const kRdkInboxCharacteristic = QBluetoothUuid(QString("cb163929-9a3d-4a1e-826f-e7e7cb2039e8"));
+// static QBluetoothUuid const kRdkInboxCharacteristic = QBluetoothUuid(QString("cb163929-9a3d-4a1e-826f-e7e7cb2039e8"));
+
+static QString serviceStateToString(QLowEnergyService::ServiceState s)
+{
+  if (s == QLowEnergyService::InvalidService)
+    return "InvalidService";
+  if (s == QLowEnergyService::DiscoveryRequired)
+    return "DiscoveryRequired";
+  if (s == QLowEnergyService::DiscoveringServices)
+    return "DiscoveringServices";
+  if (s == QLowEnergyService::ServiceDiscovered)
+    return "ServiceDiscovered";
+  if (s == QLowEnergyService::LocalService)
+    return "LocalService";
+  return "Unknown Service State";
+  
+}
 
 static QString propertiesToString(QLowEnergyCharacteristic::PropertyTypes props)
 {
@@ -46,6 +59,7 @@ static QString propertiesToString(QLowEnergyCharacteristic::PropertyTypes props)
   return "[" + list.join(',') + "]";
 }
 
+#if 0
 static QMap<QBluetoothUuid, QString> kRDKCharacteristicUUIDs = 
 {
   { kRdkProvisionStateCharacteristic, "Provision State"},
@@ -55,6 +69,7 @@ static QMap<QBluetoothUuid, QString> kRDKCharacteristicUUIDs =
   { QBluetoothUuid(QString("12984c43-3b43-4952-a387-715dcf9795c6")), "DeviceId"},
   { QBluetoothUuid(QString("16abb396-ab2c-4928-973d-e28a406d042b")), "Lost And Found Access Token"}
 };
+#endif
 
 static uint16_t
 ST(uint16_t n)
@@ -100,8 +115,8 @@ statusToString(QByteArray const& arr)
 static QString charName(QLowEnergyCharacteristic const& c)
 {
   QString name = c.name();
-  if (name.isEmpty() && kRDKCharacteristicUUIDs.contains(c.uuid()))
-    name = kRDKCharacteristicUUIDs[c.uuid()];
+//  if (name.isEmpty() && kRDKCharacteristicUUIDs.contains(c.uuid()))
+//    name = kRDKCharacteristicUUIDs[c.uuid()];
   return name;
 }
 
@@ -109,8 +124,6 @@ static QString
 byteArrayToString(QBluetoothUuid const& uuid, QByteArray const& a)
 {
   QString s;
-  if (uuid == kRdkProvisionStateCharacteristic)
-    return statusToString(a);
 
   bool allAscii = true;
   for (char c : a)
@@ -135,8 +148,6 @@ BluetoothApplication::BluetoothApplication(QBluetoothAddress const& adapter)
   : m_disco_agent(nullptr)
   , m_adapter(adapter)
   , m_controller(nullptr)
-  , m_rdk_service(nullptr)
-  , m_poll_status(true)
   , m_network_access_manager(nullptr)
   , m_do_full_provision(false)
 {
@@ -215,15 +226,6 @@ BluetoothApplication::onDiscoveryFinished()
     log("found service uuid:%s name:%s", qPrintable(service->serviceUuid().toString()),
       qPrintable(service->serviceName()));
 
-
-    if (service->serviceUuid() == kRdkProvisionService)
-    {
-      log("found RDK setup service");
-      m_rdk_service = service;
-      connect(m_rdk_service, &QLowEnergyService::characteristicChanged,
-          this, &BluetoothApplication::onCharacteristicChanged);
-    }
-
     m_discovered_services.append(service);
   }
 
@@ -261,19 +263,6 @@ BluetoothApplication::introspectNextService()
 
     log("TODO: remove this statement");
     quit();
-
-    // connect for updates to status
-    connect(m_rdk_service, &QLowEnergyService::characteristicChanged,
-      this, &BluetoothApplication::onCharacteristicChanged);
-
-    // until we get the notify working
-    if (m_poll_status)
-      pollStatus();
-
-    // XXX
-    QLowEnergyCharacteristic pubKey = m_rdk_service->characteristic(kRdkPublicKeyCharacteristic);
-    log("uuid pubkey:%s", qPrintable(pubKey.uuid().toString()));
-    // getWiFiConfiguration(m_xbo_account_id, m_client_secret);
   }
 }
 
@@ -313,7 +302,7 @@ BluetoothApplication::onServiceStateChanged(QLowEnergyService::ServiceState newS
 {
   if (newState != QLowEnergyService::ServiceDiscovered)
   {
-    log("unhandled service state:%d", newState);
+    log("unhandled service state:%s", qPrintable(serviceStateToString(newState)));
     return;
   }
 
@@ -336,38 +325,12 @@ BluetoothApplication::onServiceStateChanged(QLowEnergyService::ServiceState newS
     // read-only, so we don't need to do this. The XW4 already has notify set.
     // A callback for characteristicChanged is already connected
 
-    #if 0
-    if (c.uuid() == kRdkProvisionStateCharacteristic)
-    {
-      auto props = c.properties();
-      if (props & QLowEnergyCharacteristic::Notify)
-      {
-        auto desc = c.descriptor(QBluetoothUuid::ClientCharacteristicConfiguration);
-        if (desc.isValid())
-        {
-          s->writeDescriptor(desc, QByteArray::fromHex("0100"));
-          log("enabled notification on %s", qPrintable(charName(c)));
-        }
-      }
-    }
-    #endif
-
-    // If the status char has notify, no need to poll
-    if ((c.uuid() == kRdkProvisionStateCharacteristic) && (c.properties() & QLowEnergyCharacteristic::Notify))
-    {
-      log("setting poll status to false, since %s has notify enabled",
-        qPrintable(c.uuid().toString()));
-      m_poll_status = false;
-    }
-
     if (c.uuid() == QBluetoothUuid(QString("00002a23-0000-1000-8000-00805f9b34fb")))
       m_json_info["systemId"] = qPrintable(byteArrayToString(c.uuid(), value));
     else if (c.uuid() == QBluetoothUuid(QString("00002a25-0000-1000-8000-00805f9b34fb")))
       m_json_info["serialNumber"]= qPrintable(byteArrayToString(c.uuid(), value));
     else if (c.uuid() == QBluetoothUuid(QString("00002a24-0000-1000-8000-00805f9b34fb")))
       m_json_info["model"] = qPrintable(byteArrayToString(c.uuid(), value));
-    else if (c.uuid() == kRdkPublicKeyCharacteristic)
-      m_public_key = byteArrayToString(c.uuid(), value);
 
     if (m_use_pubkey)
       m_json_info["publicKey"] = m_public_key;
@@ -377,13 +340,7 @@ BluetoothApplication::onServiceStateChanged(QLowEnergyService::ServiceState newS
 
   m_discovered_chars.clear();
   for (QLowEnergyCharacteristic const& c : s->characteristics())
-  {
-    if (c.uuid() == kRdkProvisionStateCharacteristic)
-      m_rdk_status_char = c;
-    if (c.uuid() == kRdkWiFiConfigCharacteristic)
-      m_rdk_wifi_char = c;
     m_discovered_chars.append(c);
-  }
   m_chars_iterator = m_discovered_chars.begin();
 
   readNextCharacteristic();
@@ -403,32 +360,9 @@ BluetoothApplication::log(char const* format, ...)
 }
 
 void
-BluetoothApplication::pollStatus()
-{
-  log("starting polling timer for status");
-  connect(m_rdk_service, &QLowEnergyService::characteristicRead, [=](QLowEnergyCharacteristic const& c, QByteArray const& value) {
-    QTimer::singleShot(1000, [this, c, value]
-    {
-      QString name = charName(c);
-      log("characterisitic READ uuid:%s name:%s", qPrintable(c.uuid().toString()),
-        qPrintable(name));
-      log("\tprops:%s", qPrintable(propertiesToString(c.properties())));
-      log("\tvalue:%s", qPrintable(byteArrayToString(c.uuid(), value)));
-      
-      m_rdk_service->readCharacteristic(m_rdk_status_char);
-    });
-  });
-
-  m_rdk_service->readCharacteristic(m_rdk_status_char);
-
-}
-
-void
 BluetoothApplication::onCharacteristicChanged(QLowEnergyCharacteristic const& c, QByteArray const& value)
 {
   QString name = c.name();
-  if (name.isEmpty() && kRDKCharacteristicUUIDs.contains(c.uuid()))
-    name = kRDKCharacteristicUUIDs[c.uuid()];
   log("characterisitic CHANGED uuid:%s name:%s", qPrintable(c.uuid().toString()),
     qPrintable(name));
   log("\tprops:%s", qPrintable(propertiesToString(c.properties())));
