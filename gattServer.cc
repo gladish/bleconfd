@@ -16,6 +16,9 @@
 #include "defs.h"
 #include "gattServer.h"
 #include "xLog.h"
+#include "beacon.h"
+#include "appSettings.h"
+#include "blepacket.h"
 
 #include <exception>
 #include <sstream>
@@ -155,6 +158,8 @@ GattServer::init()
 std::shared_ptr<GattClient>
 GattServer::accept(GattClient::DeviceInfoProvider const& p)
 {
+  std::string bleName(appSettings_get_ble_value("ble_name"));
+  startBeacon(bleName);
   mainloop_init();
 
   sockaddr_l2 peer_addr;
@@ -216,8 +221,7 @@ GattClient::buildJsonRpcService()
   bt_uuid_t uuid;
 
   bt_string_to_uuid(&uuid, kUuidRpcService.c_str());
-  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 2);
-  // gatt_db_attribute_get_handle(service); do we need this handle?
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 16);
 
   // inbox
   bt_string_to_uuid(&uuid, kUuidRpcInbox.c_str());
@@ -256,7 +260,69 @@ GattClient::onInboxWrite(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
 void
 GattClient::onInboxWrite(uint32_t id, uint8_t const* data, uint16_t offset, size_t len)
 {
-  // TODO client is writing data into inbox
+  XLOG_INFO("onInboxWrite id = %d, offset = %d, len = %d",id,offset,len);
+
+
+  // new buffer with new length
+  uint8_t * new_buffer = static_cast<uint8_t *>(malloc(m_rpc_buffer_len + len)); 
+  if (m_rpc_buffer && m_rpc_buffer_len > 0) 
+  {
+    // copy old data
+    memcpy(new_buffer, m_rpc_buffer, m_rpc_buffer_len);
+    free(m_rpc_buffer); // clear old buffer
+    XLOG_DEBUG("copy old cache buffer to new buffer, len = %d", m_rpc_buffer_len);
+  }
+
+  // copy new data
+  memcpy(new_buffer + m_rpc_buffer_len, data + offset, len);
+
+  // set buffer and length
+  m_rpc_buffer = new_buffer;
+  m_rpc_buffer_len = m_rpc_buffer_len + len; 
+  XLOG_DEBUG("new buffer created, len = %d, h1=%d, h2=%d", m_rpc_buffer_len, *(m_rpc_buffer), *(m_rpc_buffer + 1));
+
+  // get message entity from buffer
+  if (BLEPacket::isContainsHeader(m_rpc_buffer))
+  {
+    XLOG_DEBUG("found a new message header");
+    int payloadLength = BLEPacket::frameLengthFromHeader(*reinterpret_cast<int *>(m_rpc_buffer));
+    if (payloadLength + HEADER_LENGTH <= (int)m_rpc_buffer_len)
+    {
+      XLOG_DEBUG("found a new message payload len = %d, header_len = %d, cache buffer len = %d", payloadLength, HEADER_LENGTH, m_rpc_buffer_len);
+      char* payload = static_cast<char*>(malloc(payloadLength + 1));
+      memcpy(payload, m_rpc_buffer + HEADER_LENGTH, payloadLength);
+      payload[payloadLength] = '\0';
+      // rebuild cache buffer
+      int left_len = m_rpc_buffer_len - payloadLength - HEADER_LENGTH;
+      if (left_len <= 0) 
+      {
+        free(m_rpc_buffer);
+        m_rpc_buffer = nullptr;
+        m_rpc_buffer_len = 0;
+      } else 
+      {
+        new_buffer = static_cast<uint8_t *>(malloc(left_len));
+        memcpy(new_buffer, m_rpc_buffer + payloadLength + HEADER_LENGTH, left_len);
+        free(m_rpc_buffer);
+        m_rpc_buffer = new_buffer;
+        m_rpc_buffer_len = left_len;
+      }
+
+      XLOG_DEBUG("resize rpc cache buffer, length = %d", m_rpc_buffer_len);
+      XLOG_DEBUG("new message = %s\n", payload);
+      cJSON* req = cJSON_Parse(payload);
+
+      // let rpc dispatcher process it
+      m_data_handler(req);
+
+      // free payload char array
+      free(payload);
+
+    } else 
+    {
+       XLOG_DEBUG("the rpc cache buffer length not enough for a full message");
+    }
+  }
 }
 
 void
@@ -270,7 +336,17 @@ GattClient::onOutboxRead(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
 void
 GattClient::onOutboxRead(uint32_t id, uint16_t offset)
 {
-  // TODO: client is reading from inbox
+  if (m_outbox_buffer_len > 0)
+  {
+    int left_length = m_outbox_buffer_len - offset;
+    gatt_db_attribute_read_result(m_outbox, id, 0, m_outbox_buffer + offset, left_length);
+
+    if (offset + m_mtu >= m_outbox_buffer_len)
+    {
+      free(m_outbox_buffer);
+      m_outbox_buffer_len = 0;
+    }
+  }
 }
 
 void
@@ -450,7 +526,8 @@ GattClient::onAsyncMessage(int fd, uint32_t UNUSED_PARAM(events), void* argp)
     XLOG_ERROR("error reading from pipe:%s", strerror(errno));
     return;
   }
-
+  
+  XLOG_DEBUG("onAsyncMessage evt, buff = %s", buff);
   if (strcmp(buff, kOutgoingDataMessage.c_str()) == 0)
   {
     clnt->processOutgoingMessageQueue();
@@ -493,13 +570,30 @@ GattClient::processOutgoingMessageQueue()
     if (next_outgoing_message)
     {
       char* payload = cJSON_PrintUnformatted(next_outgoing_message);
-      if (!payload)
+      size_t len = strlen(payload);
+
+      int packet_len = len;
+      BLEPacket::Fragmenter fragmenter(payload, len, len);
+      uint8_t* buffer = static_cast<uint8_t*>(malloc(len + HEADER_LENGTH));
+      fragmenter.nextFrameWithHeader(buffer, &packet_len);
+      packet_len = packet_len + 4;
+
+      
+
+      XLOG_DEBUG("processOutgoingMessageQueue payload = %s, m_mtu = %d, payload length = %d, body length = %d", payload, m_mtu, len, packet_len);
+      
+      uint8_t* outbox_buffer = static_cast<uint8_t *>(malloc(m_outbox_buffer_len + packet_len));
+      if (m_outbox_buffer && m_outbox_buffer_len > 0) 
       {
-        // TODO: split message using a function of the mtu. @see m_mtu. There's
-        // also a way to query the att layer for the current mtu size. Account
-        // for the 4-byte header, split payload into chunks, and then send
-        // them all as notify to the outbox
+        memcpy(outbox_buffer, m_outbox_buffer, m_outbox_buffer_len);
+        free(m_outbox_buffer); // free outbox buffer
       }
+      memcpy(outbox_buffer + m_outbox_buffer_len, buffer, packet_len);
+
+      m_outbox_buffer = outbox_buffer;
+      m_outbox_buffer_len = m_outbox_buffer_len + packet_len;
+
+      free(buffer); // packet buffer
       cJSON_Delete(next_outgoing_message);
     }
   }
@@ -507,6 +601,11 @@ GattClient::processOutgoingMessageQueue()
 
 GattClient::GattClient(int fd)
   : m_fd(fd)
+  , m_mtu(23)  // default BLE mtu
+  , m_rpc_buffer(nullptr)
+  , m_rpc_buffer_len(0)
+  , m_outbox_buffer(nullptr)
+  , m_outbox_buffer_len(0)
   , m_service_change_enabled(false)
 {
 }
@@ -522,6 +621,12 @@ GattClient::~GattClient()
 
   if (m_db)
     gatt_db_unref(m_db);
+  
+  if (m_rpc_buffer_len > 0)
+    free(m_rpc_buffer);
+  
+  if (m_outbox_buffer_len > 0)
+    free(m_outbox_buffer);
 }
 
 void
@@ -533,6 +638,7 @@ GattClient::enqueueForSend(cJSON* json)
   }
 
   // signal mainloop_run() thread of pending outgoing message
+  XLOG_DEBUG("enqueueForSend a message, write to m_pipe");
   int ret = write(m_pipe[1], kOutgoingDataMessage.c_str(), kOutgoingDataMessage.size());
   if (ret < 0)
   {

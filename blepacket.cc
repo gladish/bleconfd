@@ -22,13 +22,14 @@
 
 static uint16_t kFirstFrameBit          = {0x0001};
 static uint16_t kContinuationFrameBit   = {0x0002};
+static uint16_t kFrameVersion           = {0x7};
 
 BLEPacket::Fragmenter::Fragmenter(char const* s, int n, int fragment_size)
-  : m_data(reinterpret_cast<uint8_t const *>(s))
-  , m_index(0)
-  , m_header(0)
-  , m_length(n)
-  , m_fragment_size(fragment_size)
+    : m_data(reinterpret_cast<uint8_t const *>(s))
+    , m_index(0)
+    , m_header(0)
+    , m_length(n)
+    , m_fragment_size(fragment_size)
 {
 }
 
@@ -61,6 +62,7 @@ BLEPacket::Fragmenter::nextFrame(uint8_t const** p, int* n, uint32_t* header)
   if (header)
   {
     *header = 0;
+    *header |= (kFrameVersion << 28);
     if (m_index == 0)
       *header |= (kFirstFrameBit << 16);
     else
@@ -93,7 +95,7 @@ BLEPacket::printHeader(int n)
     printf("%0d", (flags >> (15 - i)) & 1);
   }
   printf("]");
-  printf("%05d", frameLengthFromHeader(n));
+  printf("%05d\n", frameLengthFromHeader(n));
 }
 
 uint16_t
@@ -103,24 +105,31 @@ BLEPacket::frameLengthFromHeader(uint16_t n)
 }
 
 bool
-BLEPacket::isContinuationFrame(uint32_t header) 
+BLEPacket::isContinuationFrame(uint32_t header)
 {
-  return false;
+  return ((0x00ff0000 & header) >> 15) > 1;
 }
 
-#if 0
+
 bool
 BLEPacket::isFirstFrame(uint32_t header)
 {
-  return false;
+  return (0x00ff0000 & header) >> 16 == 1;
 }
-#endif
+
+
+bool
+BLEPacket::isContainsHeader(uint8_t* frame)
+{
+  int header = *reinterpret_cast<int*>(frame);
+  return header >> 28 == kFrameVersion && isFirstFrame(header);
+}
 
 void
 BLEPacket::printFrame(uint8_t* frame)
 {
-  int* header = reinterpret_cast<int *>(frame);
-  printf("HDR:");
+  int* header = reinterpret_cast<int*>(frame);
+  printf("---> HDR:");
   printHeader(*header);
-  printf(" PKT:%.*s\n", frameLengthFromHeader(*header), (char *) (frame + 4));
+  printf("---> PKT:%.*s\n", frameLengthFromHeader(*header), (char*) (frame + 4));
 }

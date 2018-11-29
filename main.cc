@@ -18,11 +18,19 @@
 #include "wpaControl.h"
 #include "gattServer.h"
 #include "xLog.h"
+#include "beacon.h"
+#include "appSettings.h"
+#include "util.h"
 
 #include <getopt.h>
 #include <fstream>
+#include <streambuf>
 #include <iostream>
 #include <string>
+#include <vector>
+
+using std::string;
+using std::vector;
 
 namespace
 {
@@ -49,16 +57,53 @@ namespace
     return std::string();
   }
 
+  /**
+   * get device line and split into vector from devices_db file
+   **/
+  vector<string> 
+  getDeviceInfoFromDB(string const& rCode)
+  {
+    std::ifstream mf("devices_db");
+    string line;
+
+
+    while (std::getline(mf, line))
+    {
+      vector<string> t = split(line, ",");
+      if (!t[0].compare(rCode))
+      {
+        return t;
+      }
+    }
+    vector<string> empty;
+    return empty;
+  }
+
+  /**
+   * get the file content
+   **/
+  std::string getContentFromFile(char const* file)
+  {
+    std::ifstream mf(file);
+    std::string system_id;
+    if (std::getline(mf, system_id)) 
+    {
+      return system_id;
+    } else 
+    {
+      return std::string("unkown");
+    }
+  }
+  
   std::string DIS_getSystemId()
   {
-    // TODO
-    return std::string();
+    // get system id from machine id
+    return getContentFromFile("/etc/machine-id");
   }
 
   std::string DIS_getModelNumber()
   {
-    // TODO
-    return std::string();
+    return getContentFromFile("/proc/device-tree/model");
   }
 
   std::string DIS_getSerialNumber()
@@ -68,8 +113,14 @@ namespace
 
   std::string DIS_getFirmwareRevision()
   {
-    // TODO
-    return std::string();
+    // get version from command "uname -a"
+    std::string full = runCommand("uname -a");
+    size_t index = full.find(" SMP");
+    if (index != std::string::npos)
+    {
+      return full.substr(0, index);
+    }
+    return full;
   }
 
   std::string DIS_getHardwareRevision()
@@ -79,13 +130,33 @@ namespace
 
   std::string DIS_getSoftwareRevision()
   {
-    return std::string();
+    return std::string(BLECONFD_VERSION);
   }
 
   std::string DIS_getManufacturerName()
   {
-    // TODO
-    return std::string();
+    string rCode = DIS_getHardwareRevision();
+    vector<string> deviceInfo = getDeviceInfoFromDB(rCode);
+    
+    if( deviceInfo.size() > 0 )
+    {
+      return deviceInfo[4];
+    }
+    return std::string("unkown");
+  }
+
+  /**
+   * dump Provider lines
+   **/
+  void DIS_dumpProvider()
+  {
+    XLOG_DEBUG("DIS_getSystemId         = %s", DIS_getSystemId().c_str());
+    XLOG_DEBUG("DIS_getModelNumber      = %s", DIS_getModelNumber().c_str());
+    XLOG_DEBUG("DIS_getSerialNumber     = %s", DIS_getSerialNumber().c_str());
+    XLOG_DEBUG("DIS_getFirmwareRevision = %s", DIS_getFirmwareRevision().c_str());
+    XLOG_DEBUG("DIS_getHardwareRevision = %s", DIS_getHardwareRevision().c_str());
+    XLOG_DEBUG("DIS_getSoftwareRevision = %s", DIS_getSoftwareRevision().c_str());
+    XLOG_DEBUG("DIS_getManufacturerName = %s", DIS_getManufacturerName().c_str());
   }
 
   GattClient::DeviceInfoProvider disProvider =
@@ -180,14 +251,14 @@ namespace
         if (func)
         {
           cJSON* temp = cJSON_CreateObject();
-          cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString("2.0"));
+          cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString(JSON_RPC_VERSION));
           cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(id->valueint));
 
           int ret = func(req, &response);
           if (ret)
-            cJSON_AddItemToObject(temp, "error", response);
+            cJSON_AddItemToObject(response, "error", temp);
           else
-            cJSON_AddItemToObject(temp, "result", response);
+            cJSON_AddItemToObject(response, "result", temp);
         }
         else
         {
@@ -252,14 +323,22 @@ int main(int argc, char* argv[])
   }
 
   xLog::getLogger().setLevel(logLevel_Debug);
-
+  appSettings_init(configFile.c_str());
+  
   RpcDispatcher rpc_dispatcher;
   rpc_dispatcher.registerRpcFunctions();
 
-  wpaControl_init("/var/run/wpa_supplicant/wlan1", std::bind(&RpcDispatcher::enqueueAsyncMessage,
+  int wpa_init_ret = wpaControl_init(appSettings_get_wifi_value("interface"), 
+    std::bind(&RpcDispatcher::enqueueAsyncMessage,
     &rpc_dispatcher, std::placeholders::_1));
-  appSettings_init(configFile.c_str());
 
+  if (wpa_init_ret)
+  {
+    XLOG_ERROR("wpaControl_init failed, code = %d", wpa_init_ret);
+    exit(1);
+  }
+
+  DIS_dumpProvider();
   while (true)
   {
     try

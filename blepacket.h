@@ -18,6 +18,8 @@
 
 #include <stdint.h>
 
+#define HEADER_LENGTH (4)
+
 class BLEPacket
 {
 public:
@@ -28,6 +30,7 @@ public:
 
   public:
     bool nextFrameWithHeader(uint8_t* buff, int* n);
+
     bool nextFrame(uint8_t const** p, int* n, uint32_t* header = nullptr);
 
   private:
@@ -40,8 +43,15 @@ public:
 
 public:
   static void printHeader(int n);
+
   static uint16_t frameLengthFromHeader(uint16_t n);
-  static bool isContinuationFrame(uint32_t header) ;
+
+  static bool isContinuationFrame(uint32_t header);
+
+  static bool isFirstFrame(uint32_t header);
+
+  static bool isContainsHeader(uint8_t* frame);
+
   static void printFrame(uint8_t* frame);
 };
 

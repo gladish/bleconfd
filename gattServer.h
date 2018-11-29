@@ -107,6 +107,10 @@ private:
   bt_gatt_server*     m_server;
   int                 m_pipe[2];
   uint16_t            m_mtu;
+  uint8_t*            m_rpc_buffer;
+  uint32_t            m_rpc_buffer_len;
+  uint8_t*            m_outbox_buffer;
+  uint32_t            m_outbox_buffer_len;
   std::queue<cJSON *> m_outgoing_queue;
   std::mutex          m_mutex;
   data_handler        m_data_handler;
