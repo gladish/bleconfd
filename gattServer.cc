@@ -36,6 +36,7 @@ extern "C"
 
 namespace
 {
+  char ServerName[64]             { "TheUnknownServer" };
   char const      kRecordDelimiter        {'\n'};
   uint16_t const kUuidDeviceInfoService   {0x180a};
   static const uint16_t kUuidGap          {0x1800};
@@ -51,9 +52,7 @@ namespace
 
   std::string const kUuidRpcService       {"503553ca-eb90-11e8-ac5b-bb7e434023e8"};
   std::string const kUuidRpcInbox         {"510c87c8-eb90-11e8-b3dc-17292c2ecc2d"};
-  std::string const kUuidRpcOutbox        {"5140f882-eb90-11e8-a835-13d2bd922d3f"};
-
-  std::string const kOutgoingDataMessage  {"outgoing-data"};
+  std::string const kUuidRpcEPoll         {"5140f882-eb90-11e8-a835-13d2bd922d3f"};
 
   void DIS_writeCallback(gatt_db_attribute* UNUSED_PARAM(attr), int err, void* UNUSED_PARAM(argp))
   {
@@ -183,10 +182,24 @@ GattClient::init(DeviceInfoProvider const& p)
 {
   m_dis_provider = p;
   m_att = bt_att_new(m_fd, 0);
+  if (!m_att)
+  {
+    XLOG_ERROR("failed to create new att:%d", errno);
+  }
+
   bt_att_set_close_on_unref(m_att, true);
   bt_att_register_disconnect(m_att, &GattClient::disconnectCallback, this, nullptr);
   m_db = gatt_db_new();
+  if (!m_db)
+  {
+    XLOG_ERROR("failed to create gatt database");
+  }
+
   m_server = bt_gatt_server_new(m_db, m_att, m_mtu);
+  if (!m_server)
+  {
+    XLOG_ERROR("failed to create gatt server");
+  }
 
   if (true)
   {
@@ -213,7 +226,12 @@ GattClient::buildJsonRpcService()
   bt_uuid_t uuid;
 
   bt_string_to_uuid(&uuid, kUuidRpcService.c_str());
-  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 2);
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 5);
+  if (!service)
+  {
+    XLOG_CRITICAL("failed to add rpc service to gatt db");
+  }
+
   // gatt_db_attribute_get_handle(service); do we need this handle?
 
   // data channel
@@ -222,36 +240,57 @@ GattClient::buildJsonRpcService()
     service,
     &uuid,
     BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
-    BT_GATT_CHRC_PROP_WRITE,
+    BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_WRITE,
     &GattClient::onDataChannelOut,  // remote client is reading 
     &GattClient::onDataChannelIn,   // remote client is writing 
     this);
+  if (!m_data_channel)
+  {
+    XLOG_CRITICAL("failed to create inbox characteristic");
+  }
 
-  // outbox
-  bt_string_to_uuid(&uuid, kUuidRpcOutbox.c_str());
+  // blepoll
+  bt_string_to_uuid(&uuid, kUuidRpcEPoll.c_str());
   m_blepoll = gatt_db_service_add_characteristic(
     service,
     &uuid,
     BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
     BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_NOTIFY,
-    nullptr,
+    &GattClient::onEPollRead,
     nullptr,
     this);
+  if (!m_blepoll)
+  {
+    XLOG_CRITICAL("failed to create ble poll indicator characteristic");
+  }
 
   gatt_db_service_set_active(service, true);
 }
 
 void
-GattClient::onDataChannelIn(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
-  uint16_t offset, uint8_t const* data, size_t len, uint8_t UNUSED_PARAM(opcode),
-  bt_att* UNUSED_PARAM(att), void* argp)
+GattClient::onDataChannelIn(
+  gatt_db_attribute*    attr,
+  uint32_t              id,
+  uint16_t              offset,
+  uint8_t const*        data,
+  size_t                len,
+  uint8_t               opcode,
+  bt_att*               att,
+  void*                 argp)
 {
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
-  clnt->onDataChannelIn(id, data, offset, len);
+  clnt->onDataChannelIn(attr, id, offset, data, len, opcode, att);
 }
 
 void
-GattClient::onDataChannelIn(uint32_t UNUSED_PARAM(id), uint8_t const* data, uint16_t offset, size_t len)
+GattClient::onDataChannelIn(
+  gatt_db_attribute*    UNUSED_PARAM(attr),
+  uint32_t              UNUSED_PARAM(id),
+  uint16_t              offset,
+  uint8_t const*        data,
+  size_t                len,
+  uint8_t               UNUSED_PARAM(opcode),
+  bt_att*               UNUSED_PARAM(att))
 {
   for (size_t i = 0; i < len; ++i)
   {
@@ -261,28 +300,73 @@ GattClient::onDataChannelIn(uint32_t UNUSED_PARAM(id), uint8_t const* data, uint
     if (c == kRecordDelimiter)
     {
       // TODO: dispatch
-
       m_incoming_buff.clear();
     }
   }
 }
 
 void
-GattClient::onDataChannelOut(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
-  uint16_t offset, uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
+GattClient::onDataChannelOut(
+  gatt_db_attribute*    attr,
+  uint32_t              id,
+  uint16_t              offset,
+  uint8_t               opcode,
+  bt_att*               att,
+  void*                 argp)
 {
   GattClient* clnt = reinterpret_cast<GattClient *>(argp);
-  clnt->onDataChannelOut(id, offset);
+  clnt->onDataChannelOut(attr, id, offset, opcode, att);
 }
 
 void
-GattClient::onDataChannelOut(uint32_t id, uint16_t offset)
+GattClient::onDataChannelOut(
+  gatt_db_attribute*    attr,
+  uint32_t              id,
+  uint16_t              offset,
+  uint8_t               opcode,
+  bt_att*               UNUSED_PARAM(att))
 {
-  XLOG_INFO("onDataChannelOut%d, %u", id, offset);
+  XLOG_INFO("onDataChannelOut(id=%d, offset=%u, opcode=%d)",
+    id, offset, opcode);
 
   // TODO: client is reading from inbox
 
   // TODO: how do we handle the offset?
+
+  // XXX: just to make clients happy for now
+  uint8_t const* value = nullptr;
+  gatt_db_attribute_read_result(attr, id, 0, value, 0);
+}
+
+void
+GattClient::onEPollRead(
+  gatt_db_attribute*    attr,
+  uint32_t              id,
+  uint16_t              offset,
+  uint8_t               opcode,
+  bt_att*               att,
+  void*                 argp)
+{
+  uint32_t value = 1234;
+
+  value = htonl(value);
+  gatt_db_attribute_read_result(attr, id, 0, reinterpret_cast<uint8_t const *>(&value),
+    sizeof(value));
+}
+
+void
+GattClient::onGapExtendedPropertiesRead(
+  struct gatt_db_attribute*     attr,
+  uint32_t                      id,
+  uint16_t         UNUSED_PARAM(offset),
+  uint8_t          UNUSED_PARAM(opcode),
+  struct bt_att*   UNUSED_PARAM(att),
+  void*            UNUSED_PARAM(argp))
+{
+  uint8_t value[2];
+  value[0] = BT_GATT_CHRC_EXT_PROP_RELIABLE_WRITE;
+  value[1] = 0;
+  gatt_db_attribute_read_result(attr, id, 0, value, sizeof(value));
 }
 
 void
@@ -301,7 +385,7 @@ GattClient::buildGapService()
 
   bt_uuid16_create(&uuid, GATT_CHARAC_EXT_PROPER_UUID);
   gatt_db_service_add_descriptor(service, &uuid, BT_ATT_PERM_READ,
-    nullptr, nullptr, this);
+    &GattClient::onGapExtendedPropertiesRead, nullptr, this);
 
   // appearance
   bt_uuid16_create(&uuid, GATT_CHARAC_APPEARANCE);
@@ -318,22 +402,58 @@ GattClient::buildGapService()
 
 void
 GattClient::onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp)
+    uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* UNUSED_PARAM(argp))
 {
   XLOG_DEBUG("onGapRead %04x", id);
-  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
 
-  // TODO:
+  uint8_t error = 0;
+  size_t len = strlen(ServerName);
+  if (offset > len)
+  {
+    error = BT_ATT_ERROR_INVALID_OFFSET;
+  }
+  else
+  {
+    error = 0;
+    len -= offset;
+    uint8_t const* value = nullptr;
+    if (len)
+    {
+      value = reinterpret_cast<uint8_t const *>(ServerName + offset);
+    }
+    gatt_db_attribute_read_result(attr, id, error, value, len);
+  }
 }
 
+
 void
-GattClient::onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t const* data, size_t len, uint8_t opecode, bt_att* att, void* argp)
+GattClient::onGapWrite(
+  gatt_db_attribute*  attr,
+  uint32_t            id,
+  uint16_t            offset,
+  uint8_t const*      data,
+  size_t              len,
+  uint8_t             UNUSED_PARAM(opcode),
+  bt_att*             UNUSED_PARAM(att),
+  void*               UNUSED_PARAM(argp))
 {
   XLOG_DEBUG("onGapWrite");
-  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
 
-  // TODO:
+  uint8_t error = 0;
+  if ((offset + len) == 0)
+  {
+    memset(ServerName, 0, sizeof(ServerName));
+  }
+  else if (offset > sizeof(ServerName))
+  {
+    error = BT_ATT_ERROR_INVALID_OFFSET;
+  }
+  else
+  {
+    memcpy(ServerName + offset, data, len);
+  }
+
+  gatt_db_attribute_write_result(attr, id, error);
 }
 
 void
@@ -419,7 +539,7 @@ GattClient::addDeviceInfoCharacteristic(
 
   if (!attr)
   {
-    // TODO
+    XLOG_CRITICAL("failed to create DIS characteristic %u", id);
   }
 
   std::string value;
@@ -490,12 +610,30 @@ void
 GattClient::run()
 {
   m_mainloop_thread = std::this_thread::get_id();
+
+  sigset_t mask;
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGTERM);
+
   mainloop_run();
 }
 
 GattClient::GattClient(int fd)
   : m_fd(fd)
+  , m_att(nullptr)
+  , m_server(nullptr)
+  , m_mtu(0)
+  , m_outgoing_queue()
+  , m_mutex()
+  , m_data_handler(nullptr)
+  , m_data_channel(nullptr)
+  , m_blepoll(nullptr)
+  , m_mainloop_thread()
   , m_service_change_enabled(false)
+  , m_incoming_buff()
+  , m_outgoing_buff()
+  , m_timeout_id(-1)
 {
 }
 

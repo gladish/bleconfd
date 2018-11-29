@@ -97,6 +97,12 @@ private:
   static void onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t const* value, size_t len, uint8_t opcode, bt_att* att, void* argp);
 
+  static void onGapExtendedPropertiesRead(struct gatt_db_attribute *attrib, uint32_t id,
+    uint16_t offset, uint8_t opcode, struct bt_att* att, void* argp);
+
+  static void onEPollRead(struct gatt_db_attribute *attrib, uint32_t id,
+    uint16_t offset, uint8_t opcode, struct bt_att* att, void* argp);
+
 private:
   void buildGattDatabase();
 
@@ -106,10 +112,13 @@ private:
   void addDeviceInfoCharacteristic(gatt_db_attribute* service, uint16_t id,
     std::function<std::string ()> const& read_callback);
   void buildJsonRpcService();
-
-  void onDataChannelIn(uint32_t id, uint8_t const* data, uint16_t offset, size_t len);
-  void onDataChannelOut(uint32_t id, uint16_t offset);
   void onTimeout();
+
+  void onDataChannelOut(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
+
+  void onDataChannelIn(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att);
 
 private:
   int                 m_fd;
