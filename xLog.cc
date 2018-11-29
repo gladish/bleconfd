@@ -86,7 +86,7 @@ xLog::log(logLevel level, char const* /*file*/, int /*line*/, char const* format
   {
     timeval tv;
     gettimeofday(&tv, 0);
-    printf("%ld.%05ld (%5s) thr-%ld [%s] -- ", tv.tv_sec, tv.tv_usec, levelToString(level), syscall(__NR_gettid), "xconfigd");
+    printf("%ld.%06ld (%5s) thr-%ld [%s] -- ", tv.tv_sec, tv.tv_usec, levelToString(level), syscall(__NR_gettid), "xconfigd");
     vprintf(format, args);
     printf("\n");
   }

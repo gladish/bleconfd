@@ -62,40 +62,36 @@ public:
   inline void setDataHandler(data_handler h)
     { m_data_handler = h; }
 
-private:
-  /**
-   * Callback to handle blepoll. We use a timeout for this. 
-   */
-  static void onTimeout(int fd, void* argp);
+  void onDataChannelOut(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
 
-  static void disconnectCallback(int err, void* argp);
+  void onDataChannelIn(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att);
 
-  /**
-   * Callback to handle client writing data
-   */
-  static void onDataChannelIn(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att, void* argp);
+  void onTimeout();
 
-  /**
-   * Callback to handle client reading
-   */
-  static void onDataChannelOut(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp);
+  void onEPollRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
 
-  static void onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp);
+  void onClientDisconnected(int err);
 
-  static void onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t const* data, size_t len, uint8_t opecode, bt_att* att, void* argp);
+  void onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
 
-  static void onServiceChanged(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp);
+  void onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att);
 
-  static void onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp);
+  void onServiceChanged(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
 
-  static void onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t const* value, size_t len, uint8_t opcode, bt_att* att, void* argp);
+  void onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
+
+  void onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* value, size_t len, uint8_t opcode, bt_att* att);
+
+  void onGapExtendedPropertiesRead(gatt_db_attribute *attrib, uint32_t id,
+    uint16_t offset, uint8_t opcode, bt_att* att);
 
 private:
   void buildGattDatabase();
@@ -106,10 +102,6 @@ private:
   void addDeviceInfoCharacteristic(gatt_db_attribute* service, uint16_t id,
     std::function<std::string ()> const& read_callback);
   void buildJsonRpcService();
-
-  void onDataChannelIn(uint32_t id, uint8_t const* data, uint16_t offset, size_t len);
-  void onDataChannelOut(uint32_t id, uint16_t offset);
-  void onTimeout();
 
 private:
   int                 m_fd;

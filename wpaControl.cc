@@ -115,9 +115,9 @@ wpa_notify_read(void* argp)
 
         ret = wpa_ctrl_recv(wpa_notify, buff, &n);
         if (ret < 0) 
-          printf("error:%s\n", strerror(errno));
+          XLOG_ERROR("error:%s\n", strerror(errno));
         else 
-          printf("event:%.*s\n", n, buff);
+          XLOG_INFO("event:%.*s\n", n, buff);
       }
     }
   }
