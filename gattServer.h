@@ -16,11 +16,13 @@
 #ifndef __GATT_SERVER_H__
 #define __GATT_SERVER_H__
 
+#include "memory_stream.h"
+
+#include <list>
 #include <memory>
-#include <mutex>
 #include <thread>
-#include <queue>
 #include <vector>
+#include <sstream>
 
 extern "C" 
 {
@@ -57,7 +59,7 @@ public:
 
   void init(DeviceInfoProvider const& p);
   void run();
-  void enqueueForSend(cJSON* json);
+  void enqueueForSend(cJSON const* json);
 
   inline void setDataHandler(data_handler h)
     { m_data_handler = h; }
@@ -109,8 +111,7 @@ private:
   gatt_db*            m_db;
   bt_gatt_server*     m_server;
   uint16_t            m_mtu;
-  std::queue<cJSON *> m_outgoing_queue;
-  std::mutex          m_mutex;
+  memory_stream       m_outgoing_queue;
   data_handler        m_data_handler;
   DeviceInfoProvider  m_dis_provider;
   gatt_db_attribute*  m_data_channel;

@@ -394,13 +394,18 @@ GattClient::onDataChannelOut(
   XLOG_INFO("onDataChannelOut(id=%d, offset=%u, opcode=%d)",
     id, offset, opcode);
 
-  // TODO: client is reading from inbox
+  char buff[16]; // should match mtu
+  int n = m_outgoing_queue.get_line(buff, sizeof(buff));
 
   // TODO: how do we handle the offset?
 
-  // XXX: just to make clients happy for now
   uint8_t const* value = nullptr;
-  gatt_db_attribute_read_result(attr, id, 0, value, 0);
+  if (n > 0)
+    value = reinterpret_cast<uint8_t const *>(&buff[0]);
+  else
+    buff[0] = '\0';
+
+  gatt_db_attribute_read_result(attr, id, 0, value, n);
 }
 
 void
@@ -635,21 +640,17 @@ GattClient::buildDeviceInfoService()
 void
 GattClient::onTimeout()
 {
-  bool pending_data = false;
+  uint32_t bytes_available = m_outgoing_queue.size();
 
+  if (bytes_available > 0)
   {
-    std::lock_guard<std::mutex> guard(m_mutex);
-    pending_data = !m_outgoing_queue.empty();
-  }
+    bytes_available = htonl(bytes_available);
 
-  if (pending_data)
-  {
-    uint32_t num_bytes_remaining = 1;
     uint16_t handle = gatt_db_attribute_get_handle(m_blepoll);
     int ret = bt_gatt_server_send_notification(
       m_server,
       handle,
-      reinterpret_cast<uint8_t*>(&num_bytes_remaining),
+      reinterpret_cast<uint8_t *>(&bytes_available),
       sizeof(uint32_t));
 
     if (ret)
@@ -676,9 +677,8 @@ GattClient::GattClient(int fd)
   : m_fd(fd)
   , m_att(nullptr)
   , m_server(nullptr)
-  , m_mtu(0)
-  , m_outgoing_queue()
-  , m_mutex()
+  , m_mtu(16)
+  , m_outgoing_queue(30)
   , m_data_handler(nullptr)
   , m_data_channel(nullptr)
   , m_blepoll(nullptr)
@@ -703,12 +703,17 @@ GattClient::~GattClient()
 }
 
 void
-GattClient::enqueueForSend(cJSON* json)
+GattClient::enqueueForSend(cJSON const* json)
 {
+  if (!json)
   {
-    std::lock_guard<std::mutex> guard(m_mutex);
-    m_outgoing_queue.push(json);
+    XLOG_INFO("trying to enqueue null json document");
+    return;
   }
+
+  char* s = cJSON_Print(json);
+  m_outgoing_queue.put_line(s);
+  free(s);
 }
 
 void

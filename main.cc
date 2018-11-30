@@ -142,9 +142,15 @@ namespace
 
     void enqueueAsyncMessage(cJSON* json)
     {
-      std::lock_guard<std::mutex> guard(m_mutex);
-      if (m_client)
-        m_client->enqueueForSend(json);
+      if (!json)
+        return;
+      {
+        std::lock_guard<std::mutex> guard(m_mutex);
+        if (m_client)
+          m_client->enqueueForSend(json);
+      }
+
+      cJSON_Delete(json);
     }
 
     void onIncomingMessage(cJSON* req)

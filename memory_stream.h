@@ -31,21 +31,23 @@ public:
   {
   }
 
-
-  int getline(char* s, int n)
+  int get_line(char* s, int n)
   {
     int bytes_read = 0;
 
     std::lock_guard<std::mutex> guard(m_mutex);
     m_stream.getline(s, n, m_delimiter);
     if (m_stream.gcount() > 0)
+    {
       bytes_read = m_stream.gcount();
+      m_size -= bytes_read;
+    }
     m_stream.clear();
 
     return bytes_read;
   }
 
-  void append(char const* s)
+  void put_line(char const* s)
   {
     if (!s)
       return;
