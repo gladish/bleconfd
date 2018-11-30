@@ -4,6 +4,7 @@
 #include <QtBluetooth/QBluetoothLocalDevice>
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -14,10 +15,11 @@
 
 #include <iostream>
 
-// static QBluetoothUuid const kRdkPublicKeyCharacteristic = QBluetoothUuid(QString("cb9fee4d-c6ed-48c1-ab46-c3f2da38eedd"));
+#define BT_UUID(NAME, UUID) static QBluetoothUuid const NAME = QBluetoothUuid(QString(UUID))
 
-
-// static QBluetoothUuid const kRdkInboxCharacteristic = QBluetoothUuid(QString("cb163929-9a3d-4a1e-826f-e7e7cb2039e8"));
+BT_UUID(kRdkRpcInboxChar, "510c87c8-eb90-11e8-b3dc-17292c2ecc2d");
+BT_UUID(kRdkRpcEPollChar, "5140f882-eb90-11e8-a835-13d2bd922d3f");
+BT_UUID(kRpcRpcService,   "503553ca-eb90-11e8-ac5b-bb7e434023e8");
 
 static QString serviceStateToString(QLowEnergyService::ServiceState s)
 {
@@ -148,7 +150,6 @@ BluetoothApplication::BluetoothApplication(QBluetoothAddress const& adapter)
   : m_disco_agent(nullptr)
   , m_adapter(adapter)
   , m_controller(nullptr)
-  , m_network_access_manager(nullptr)
   , m_do_full_provision(false)
 {
   log("local adapter is null:%d", m_adapter.isNull());
@@ -160,11 +161,11 @@ BluetoothApplication::BluetoothApplication(QBluetoothAddress const& adapter)
 }
 
 void
-BluetoothApplication::run(QBluetoothAddress const& addr)
+BluetoothApplication::run(QBluetoothAddress const& addr, QJsonDocument const& req)
 {
+  m_json_request = req.toJson(QJsonDocument::Compact);
   configureDevice(addr);
 }
-  
 
 void
 BluetoothApplication::configureDevice(QBluetoothAddress const& addr)
@@ -223,6 +224,12 @@ BluetoothApplication::onDiscoveryFinished()
   {
     QLowEnergyService* service = m_controller->createServiceObject(uuid);
 
+    if (uuid == kRpcRpcService)
+    {
+      log("found rpc service");
+      m_rpc_service = service;
+    }
+
     log("found service uuid:%s name:%s", qPrintable(service->serviceUuid().toString()),
       qPrintable(service->serviceName()));
 
@@ -260,9 +267,24 @@ BluetoothApplication::introspectNextService()
     for (auto svc : m_discovered_services)
       svc->disconnect();
 
+    // connect notification
+    connect(m_rpc_service, &QLowEnergyService::characteristicChanged,
+      this, &BluetoothApplication::onCharacteristicChanged);
 
-    log("TODO: remove this statement");
-    quit();
+    QLowEnergyDescriptor notification = m_rpc_epoll.descriptor(
+      QBluetoothUuid::ClientCharacteristicConfiguration);
+    m_rpc_service->writeDescriptor(notification, QByteArray::fromHex("0100"));
+
+    if (m_rpc_service)
+    {
+      m_json_request.append(30);
+      m_rpc_service->writeCharacteristic(m_rpc_inbox, m_json_request,
+        QLowEnergyService::WriteWithResponse);
+    }
+    else
+    {
+      log("rpc service is null, can't send request");
+    }
   }
 }
 
@@ -318,22 +340,16 @@ BluetoothApplication::onServiceStateChanged(QLowEnergyService::ServiceState newS
     log("\t\tprops:%s", qPrintable(propertiesToString(c.properties())));
     log("\t\tvalue:%s", qPrintable(byteArrayToString(c.uuid(), value)));
 
-    // check to see if rdkc status char has notify enabled. if it does, then we can
-    // register for notification instead of polling
-
-    // This code actually enables notification remotely. This char is actually
-    // read-only, so we don't need to do this. The XW4 already has notify set.
-    // A callback for characteristicChanged is already connected
-
-    if (c.uuid() == QBluetoothUuid(QString("00002a23-0000-1000-8000-00805f9b34fb")))
-      m_json_info["systemId"] = qPrintable(byteArrayToString(c.uuid(), value));
-    else if (c.uuid() == QBluetoothUuid(QString("00002a25-0000-1000-8000-00805f9b34fb")))
-      m_json_info["serialNumber"]= qPrintable(byteArrayToString(c.uuid(), value));
-    else if (c.uuid() == QBluetoothUuid(QString("00002a24-0000-1000-8000-00805f9b34fb")))
-      m_json_info["model"] = qPrintable(byteArrayToString(c.uuid(), value));
-
-    if (m_use_pubkey)
-      m_json_info["publicKey"] = m_public_key;
+    if (c.uuid() == kRdkRpcInboxChar)
+    {
+      log("found inbox characterisitc");
+      m_rpc_inbox = c;
+    }
+    else if (c.uuid() == kRdkRpcEPollChar)
+    {
+      log("found epoll characterisitc");
+      m_rpc_epoll = c;
+    }
 
     readNextCharacteristic();
   });

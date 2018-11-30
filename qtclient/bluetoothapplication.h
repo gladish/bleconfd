@@ -1,6 +1,7 @@
 #ifndef __BLUETOOTH_APPLICATION_H__
 #define __BLUETOOTH_APPLICATION_H__
 
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
 #include <QNetworkReply>
@@ -17,12 +18,6 @@
 #define PRINTF_FORMAT(IDX, FIRAT)
 #endif
 
-
-extern QString const kXboAccountId;
-extern QString const kXboDeviceId;
-extern QString const kClientSecret;
-
-
 class BluetoothApplication : public QObject
 {
 Q_OBJECT
@@ -30,7 +25,7 @@ Q_OBJECT
 public:
   BluetoothApplication(QBluetoothAddress const& adapter);
 
-  void run(QBluetoothAddress const& addr);
+  void run(QBluetoothAddress const& addr, QJsonDocument const& req);
   void connectToDevice(QBluetoothDeviceInfo const& info);
   void quit();
 
@@ -58,15 +53,11 @@ private:
   QList<QLowEnergyService *>::iterator m_service_iterator;
   QList<QLowEnergyCharacteristic> m_discovered_chars;
   QList<QLowEnergyCharacteristic>::iterator m_chars_iterator;
-  QString                         m_wifi_config;
-  QJsonObject                     m_json_info;
-  QString                         m_xbo_account_id;
-  QString                         m_client_secret;
-  int                             m_proto_version;
-  bool                            m_use_pubkey;
   bool                            m_is_secure;
-  QString                         m_public_key;
-  QNetworkAccessManager*          m_network_access_manager;
+  QLowEnergyCharacteristic        m_rpc_inbox;
+  QLowEnergyCharacteristic        m_rpc_epoll;
+  QLowEnergyService*              m_rpc_service;
+  QByteArray                      m_json_request;
 
   struct TimeSpan
   {
