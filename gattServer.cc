@@ -418,9 +418,11 @@ GattClient::onEPollRead(
   uint32_t              id,
   uint16_t              offset,
   uint8_t               opcode,
-  bt_att*               att)
+  bt_att*               UNUSED_PARAM(att))
 {
   uint32_t value = 1234;
+
+  XLOG_DEBUG("onEPollRead(offset=%d, opcode=%d)", offset, opcode);
 
   value = htonl(value);
   gatt_db_attribute_read_result(attr, id, 0, reinterpret_cast<uint8_t const *>(&value),
@@ -680,17 +682,17 @@ GattClient::run()
 GattClient::GattClient(int fd)
   : m_fd(fd)
   , m_att(nullptr)
+  , m_db(nullptr)
   , m_server(nullptr)
   , m_mtu(16)
   , m_outgoing_queue(kRecordDelimiter)
+  , m_incoming_buff()
   , m_data_handler(nullptr)
   , m_data_channel(nullptr)
   , m_blepoll(nullptr)
-  , m_mainloop_thread()
   , m_service_change_enabled(false)
-  , m_incoming_buff()
-  , m_outgoing_buff()
   , m_timeout_id(-1)
+  , m_mainloop_thread()
 {
 }
 

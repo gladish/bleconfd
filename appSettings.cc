@@ -21,6 +21,8 @@
 
 static GKeyFile* key_file = g_key_file_new();
 static char const* kDefaultGroup = "User";
+static char const* kBLE = "ble";
+static char const* kWifi = "wlan";
 
 int
 appSettings_init(char const* settings_file)
@@ -45,6 +47,35 @@ appSettings_init(char const* settings_file)
   return 0;
 }
 
+// get string value from local ini file
+char const*
+appSettings_get_string_value(char const* key, char const* section)
+{
+  g_autoptr(GError) error = nullptr;
+  gchar* value = g_key_file_get_string(key_file,
+                                       section,
+                                       key,
+                                       &error);
+  if (error)
+  {
+    XLOG_ERROR("appSettings_get_%s_value failed, key = %s, section = %s", section, key, section);
+    return nullptr;
+  }
+  return value;
+}
+
+char const*
+appSettings_get_ble_value(char const* key)
+{
+  return appSettings_get_string_value(key, kBLE);
+}
+
+char const*
+appSettings_get_wifi_value(char const* key)
+{
+  return appSettings_get_string_value(key, kWifi);
+}
+
 int
 appSettings_set(cJSON const* req, cJSON** res)
 {
@@ -57,7 +88,7 @@ appSettings_set(cJSON const* req, cJSON** res)
   if (!group)
     group = kDefaultGroup;
 
-  char const* name = jsonRpc_getString(req, "name");
+//  char const* name = jsonRpc_getString(req, "name");
 
   XLOG_JSON(logLevel_Debug, req);
 
@@ -74,8 +105,8 @@ appSettings_get(cJSON const* req, cJSON** res)
     // TODO
   }
 
-  char const* group = jsonRpc_getString(req, "group");
-  char const* name = jsonRpc_getString(req, "name");
+//  char const* group = jsonRpc_getString(req, "group");
+//  char const* name = jsonRpc_getString(req, "name");
 
   XLOG_JSON(logLevel_Debug, req);
 

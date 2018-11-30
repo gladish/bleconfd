@@ -17,6 +17,7 @@
 #include "wpaControl.h"
 #include "xLog.h"
 #include "jsonRpc.h"
+#include "util.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -29,6 +30,8 @@
 #include <string>
 #include <queue>
 #include <pthread.h>
+#include <sstream>
+#include <vector>
 
 #include <wpa_ctrl.h>
 #include <cJSON.h>
@@ -41,6 +44,7 @@ static pthread_t wpa_notify_thread;
 static cJSON* wpaControl_createResponse(std::string const& s);
 static cJSON* wpaControl_createError(int err);
 static ResponseSender enqueue_async_message = nullptr;
+static int connect_req_id = 0;
 
 int
 wpaControl_init(char const* control_socket, ResponseSender const& sender)
@@ -115,9 +119,9 @@ wpa_notify_read(void* argp)
 
         ret = wpa_ctrl_recv(wpa_notify, buff, &n);
         if (ret < 0) 
-          XLOG_ERROR("error:%s\n", strerror(errno));
+          printf("error:%s\n", strerror(errno));
         else 
-          XLOG_INFO("event:%.*s\n", n, buff);
+          printf("event:%.*s\n", n, buff);
       }
     }
   }
@@ -155,9 +159,152 @@ wpaControl_shutdown()
 }
 
 int
-wpaControl_connectToNetwork(cJSON const*, cJSON**)
+wpaControl_create_network(int& network_idx)
 {
-  // TODO
+  std::string buff;
+  int ret = wpaControl_command("ADD_NETWORK", buff);
+  if (ret < 0)
+  {
+    XLOG_ERROR("wpaControl_create_network failed");
+    return errno;
+  }
+  std::stringstream ss(buff);
+  ss >> network_idx;
+  return 0;
+}
+
+int
+wpaControl_connect_WPA2(int const& network_idx, char const* ssid, char const* wpa_pass)
+{
+  std::string buff;
+  int ret;
+  char command_buff[512];
+
+  sprintf(command_buff, "SET_NETWORK %d ssid \"%s\"", network_idx, ssid);
+  ret = wpaControl_command(command_buff, buff);
+  if (ret < 0)
+  {
+    XLOG_ERROR("wpaControl_connect_WPA2 set ssid failed");
+    return errno;
+  }
+
+  sprintf(command_buff, "SET_NETWORK %d psk \"%s\"", network_idx, wpa_pass);
+  ret = wpaControl_command(command_buff, buff);
+  if (ret < 0)
+  {
+    XLOG_ERROR("wpaControl_connect_WPA2 set psk failed");
+    return errno;
+  }
+
+  XLOG_DEBUG("SET_NETWORK successful %d", network_idx);
+
+  sprintf(command_buff, "SELECT_NETWORK %d", network_idx);
+  ret = wpaControl_command(command_buff, buff);
+  if (ret < 0)
+  {
+    XLOG_ERROR("wpaControl_connect_WPA2 select network failed failed");
+    return errno;
+  }
+
+  XLOG_DEBUG("SELECT_NETWORK successful %d", network_idx);
+  return 0;
+}
+
+
+std::string get_wlan_state()
+{
+  std::string statusBuffer;
+  wpaControl_command("STATUS", statusBuffer);
+  std::vector <std::string> lines = split(statusBuffer, "\n");
+  for (size_t i = 0; i < lines.size(); i++)
+  {
+    std::vector <std::string> parts = split(lines[i], "=");
+    if (!parts[0].compare("wpa_state"))
+    {
+      return parts[1];
+    }
+  }
+  return std::string();
+}
+
+cJSON*
+wpaControl_createAsyncConnectResponse(std::string const& message, std::string const& state)
+{
+  cJSON* response = cJSON_CreateObject();
+  cJSON* temp = cJSON_CreateObject();
+  cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString(JSON_RPC_VERSION));
+  cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(connect_req_id));
+  cJSON_AddItemToObject(response, "result", temp);
+  cJSON_AddItemToObject(response, "state", cJSON_CreateString(state.c_str()));
+  cJSON_AddItemToObject(response, "message", cJSON_CreateString(message.c_str()));
+  return response;
+}
+
+void*
+watch_wlan_state(void* UNUSED_PARAM(argp))
+{
+  bool running = true;
+  int pre_req_id = connect_req_id;
+  XLOG_DEBUG("watch_wlan_state create new thread to check state, req_id= %d", pre_req_id);
+  usleep(1000 * 1200); // wait some time then start check
+  // the state should be from "4WAY_HANDSHAKE" to something else
+  while (true)
+  {
+    if (!running || pre_req_id != connect_req_id) // ignore pre connect request thread
+    {
+      XLOG_DEBUG("watch_wlan_state thread exit req_id = %d", pre_req_id);
+      return nullptr;
+    }
+
+    std::string state = get_wlan_state();
+
+    if (!state.compare("SCANNING")
+        || !state.compare("DISCONNECTED")
+        || !state.compare("INACTIVE")
+        || !state.compare("INTERFACE_DISABLED")
+        ) // connect failed
+    {
+      cJSON* rsp = wpaControl_createAsyncConnectResponse("connect failed, maybe password wrong or something else",
+                                                         state);
+      enqueue_async_message(rsp);
+      running = false;
+    } else if (!state.compare("COMPLETED"))
+    {
+
+      cJSON* rsp = wpaControl_createAsyncConnectResponse("connect successful", state);
+      std::string statusBuffer;
+      wpaControl_command("STATUS", statusBuffer);
+      cJSON_AddItemToObject(rsp, "wlanStatus", wpaControl_createResponse(statusBuffer));
+
+      enqueue_async_message(rsp);
+      running = false;
+    }
+    usleep(1000 * 100);  // 200 ms check
+  }
+}
+
+int
+wpaControl_connectToNetwork(cJSON const* req, cJSON** res)
+{
+
+
+  char const* ssid = jsonRpc_getString(req, "ssid", true, "discovery");
+  char const* password = jsonRpc_getString(req, "pass", true, "cred");
+  connect_req_id = cJSON_GetObjectItem(req, "id")->valueint;
+
+  XLOG_DEBUG("invoke wpaControl_connectToNetwork ssid=%s pwd=%s req_id=%d", ssid, password, connect_req_id);
+  int new_network_idx = 0;
+  wpaControl_create_network(new_network_idx);
+  XLOG_INFO("new network created, index = %d", new_network_idx);
+  wpaControl_connect_WPA2(new_network_idx, ssid, password);
+
+  static pthread_t watch_state_t;
+  pthread_create(&watch_state_t, nullptr, &watch_wlan_state, nullptr);
+
+  // here don't return any result
+  // connect response will return async
+
+  *res = nullptr;
   return 0;
 }
 

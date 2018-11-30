@@ -31,4 +31,18 @@ int appSettings_init(char const* settings_file);
 int appSettings_set(cJSON const* req, cJSON** res);
 int appSettings_get(cJSON const* req, cJSON** res);
 
+/**
+ * get ble values
+ * @param key  the key
+ * @return  the value
+ */
+char const* appSettings_get_ble_value(char const* key);
+
+/**
+ * get wifi values
+ * @param key  the key
+ * @return  the value
+ */
+char const* appSettings_get_wifi_value(char const* key);
+
 #endif
