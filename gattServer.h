@@ -112,14 +112,13 @@ private:
   bt_gatt_server*     m_server;
   uint16_t            m_mtu;
   memory_stream       m_outgoing_queue;
+  std::vector<char>   m_incoming_buff;
   data_handler        m_data_handler;
   DeviceInfoProvider  m_dis_provider;
   gatt_db_attribute*  m_data_channel;
   gatt_db_attribute*  m_blepoll;
   std::thread::id     m_mainloop_thread;
   bool                m_service_change_enabled;
-  std::vector<char>   m_incoming_buff;
-  std::vector<char>   m_outgoing_buff;
   int                 m_timeout_id;
 };
 

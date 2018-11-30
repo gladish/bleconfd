@@ -61,7 +61,7 @@ int jsonRpc_getInt(cJSON* argv, int idx);
 /**
  *
  */
-char const* jsonRpc_getString(cJSON const* req, char const* name, bool required = false);
+char const* jsonRpc_getString(cJSON const* req, char const* name, bool required = false, char const* parent = "params");
 
 /**
  *

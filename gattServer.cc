@@ -689,7 +689,6 @@ GattClient::GattClient(int fd)
   , m_mainloop_thread()
   , m_service_change_enabled(false)
   , m_incoming_buff()
-  , m_outgoing_buff()
   , m_timeout_id(-1)
 {
 }
