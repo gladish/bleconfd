@@ -15,7 +15,9 @@ SRCS=\
   jsonRpc.cc \
   xLog.cc \
   appSettings.cc \
-  gattServer.cc
+  gattServer.cc \
+	beacon.cc \
+  util.cc
 
 OBJS=$(patsubst %.cc, %.o, $(notdir $(SRCS)))
 OBJS+=wpa_ctrl.o os_unix.o

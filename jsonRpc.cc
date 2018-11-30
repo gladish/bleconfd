@@ -116,15 +116,15 @@ jsonRpc_getInt(cJSON* argv, int idx)
 }
 
 char const*
-jsonRpc_getString(cJSON const* req, char const* name, bool required)
+jsonRpc_getString(cJSON const* req, char const* name, bool required, char const* parent)
 {
   char* s = NULL;
 
-  cJSON* params = cJSON_GetObjectItem(req, "params");
+  cJSON* params = cJSON_GetObjectItem(req, parent);
   if (!params && required)
   {
     std::stringstream buff;
-    buff << "missing 'params' structure in request";
+    buff << "missing '" << parent << "' structure in request";
     throw std::runtime_error(buff.str());
   }
 

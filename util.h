@@ -13,16 +13,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#ifndef __BLECONFD_DEFS_H__
-#define __BLECONFD_DEFS_H__
+#ifndef __UTIL_H__
+#define __UTIL_H__
 
-#include <functional>
-#include <cJSON.h>
+#include <vector>
+#include <string>
 
-#define UNUSED_PARAM(X) UNUSED_ ## X __attribute__((__unused__))
-#define BLECONFD_VERSION "1.0"
-#define JSON_RPC_VERSION "2.0"
+/**
+ * split string
+ */
+std::vector<std::string> split(std::string const& str, std::string const& delim);
 
-using ResponseSender = std::function< void (cJSON* res) >;
+/**
+ * run system command
+ */
+std::string runCommand(char const* cmd);
 
 #endif
