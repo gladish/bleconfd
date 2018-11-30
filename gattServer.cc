@@ -346,16 +346,17 @@ GattClient::buildJsonRpcService()
 
 void
 GattClient::onDataChannelIn(
-  gatt_db_attribute*    UNUSED_PARAM(attr),
-  uint32_t              UNUSED_PARAM(id),
+  gatt_db_attribute*    attr,
+  uint32_t              id,
   uint16_t              offset,
   uint8_t const*        data,
   size_t                len,
   uint8_t               UNUSED_PARAM(opcode),
   bt_att*               UNUSED_PARAM(att))
 {
-  XLOG_INFO("onDataChannelIn(offset=%d, len=%zd", offset, len);
+  XLOG_INFO("onDataChannelIn(offset=%d, len=%zd)", offset, len);
 
+  // TODO: should this use memory_stream?
   for (size_t i = 0; i < len; ++i)
   {
     char c = static_cast<char>(data[i + offset]);
@@ -363,6 +364,7 @@ GattClient::onDataChannelIn(
 
     if (c == kRecordDelimiter)
     {
+      XLOG_INFO("found end of record, dispatching requeste");
       cJSON* req = cJSON_Parse(&m_incoming_buff[0]);
       if (!req)
       {
@@ -381,6 +383,8 @@ GattClient::onDataChannelIn(
       m_incoming_buff.clear();
     }
   }
+
+  gatt_db_attribute_write_result(attr, id, 0);
 }
 
 void
@@ -678,7 +682,7 @@ GattClient::GattClient(int fd)
   , m_att(nullptr)
   , m_server(nullptr)
   , m_mtu(16)
-  , m_outgoing_queue(30)
+  , m_outgoing_queue(kRecordDelimiter)
   , m_data_handler(nullptr)
   , m_data_channel(nullptr)
   , m_blepoll(nullptr)

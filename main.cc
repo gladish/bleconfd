@@ -170,14 +170,14 @@ namespace
       if (!method)
       {
         XLOG_ERROR("request doesn't contain method");
-        // TODO
+        // TODO: respond with bad request
       }
 
       cJSON* id = cJSON_GetObjectItem(req, "id");
       if (!id)
       {
         XLOG_ERROR("request doesn't contain id");
-        // TODO
+        // TODO: respond with bad request
       }
 
       try
@@ -185,6 +185,8 @@ namespace
         jsonRpcFunction func = jsonRpc_findFunction(method->valuestring);
         if (func)
         {
+          XLOG_INFO("found %s and executing", method->valuestring);
+
           cJSON* temp = cJSON_CreateObject();
           cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString("2.0"));
           cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(id->valueint));
@@ -223,12 +225,6 @@ namespace
     std::mutex                  m_mutex;
   };
 }
-
-// TODO: proper test framework
-static cJSON* Test_wifiConnect();
-static cJSON* Test_wifiStatus();
-static cJSON* Test_appSettingsGet();
-static cJSON* Test_appSettingsSet();
 
 int main(int argc, char* argv[])
 {
@@ -285,82 +281,6 @@ int main(int argc, char* argv[])
     }
   }
 
-#if 0
-  cJSON* req = Test_appSettingsGet();
-  cJSON* res = nullptr;
-
-  rpcServer_dispatch(req, &res);
-
-  // TODO: post response on BLE outbox
-  if (res)
-  {
-    char* s = cJSON_Print(res);
-    printf("%s\n", s);
-    free(s);
-    cJSON_Delete(res);
-  }
-  cJSON_Delete(req);
-#endif
-
-
   wpaControl_shutdown();
   return 0;
-}
-
-cJSON* Test_wifiConnect()
-{
-  cJSON* req = cJSON_CreateObject();
-  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(2));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-connect"));
-  cJSON_AddItemToObject(req, "wi-fi_tech", cJSON_CreateString("infra"));
-
-  cJSON* disco = cJSON_CreateObject();
-  cJSON_AddItemToObject(disco, "ssid", cJSON_CreateString("JAKE_5"));
-  cJSON_AddItemToObject(req, "discovery", disco);
-
-  cJSON* creds = cJSON_CreateObject();
-  cJSON_AddItemToObject(creds, "akm", cJSON_CreateString("psk"));
-  cJSON_AddItemToObject(creds, "pass", cJSON_CreateString("jake1234"));
-  cJSON_AddItemToObject(req, "cred", creds);
-
-  return req;
-}
-
-cJSON* Test_wifiStatus()
-{
-  cJSON* req = cJSON_CreateObject();
-  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(1234));
-
-  return req;
-}
-
-cJSON* Test_appSettingsGet()
-{
-  cJSON* req = cJSON_CreateObject();
-  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("app-settings-get"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(1));
-
-  cJSON* params = cJSON_CreateObject();
-  cJSON_AddItemToObject(params, "name", cJSON_CreateString("setting1"));
-  cJSON_AddItemToObject(req, "params", params);
-  return req;
-}
-
-cJSON* Test_appSettingsSet()
-{
-  cJSON* req = cJSON_CreateObject();
-  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("app-settings-set"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(2));
-
-  cJSON* params = cJSON_CreateObject();
-  cJSON_AddItemToObject(params, "name", cJSON_CreateString("setting1"));
-  cJSON_AddItemToObject(params, "value", cJSON_CreateNumber(2));
-  cJSON_AddItemToObject(params, "type", cJSON_CreateNumber(appSettingsKind_Int32));
-  cJSON_AddItemToObject(req, "params", params);
-  return req;
 }
