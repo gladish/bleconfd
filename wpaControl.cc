@@ -119,9 +119,9 @@ wpa_notify_read(void* argp)
 
         ret = wpa_ctrl_recv(wpa_notify, buff, &n);
         if (ret < 0) 
-          printf("error:%s\n", strerror(errno));
+          XLOG_ERROR("error reading from WPA socket:%s", strerror(errno));
         else 
-          printf("event:%.*s\n", n, buff);
+          XLOG_INFO("event:%.*s", n, buff);
       }
     }
   }
@@ -135,13 +135,17 @@ int
 wpaControl_command(char const* cmd, std::string& res)
 {
   res.reserve(4096);
-  res.resize(4096);
+  res.resize(4069);
 
   size_t n = res.capacity();
 
+  XLOG_INFO("wpa command:%s", cmd);
   int ret = wpa_ctrl_request(wpa_request, cmd, strlen(cmd), &res[0], &n, nullptr);
   if (ret < 0)
+  {
+    XLOG_WARN("failed to submit wpa control request:%d", ret);
     return errno;
+  }
 
   res.resize(n);
   return 0;
@@ -315,9 +319,13 @@ wpaControl_getStatus(cJSON const* UNUSED_PARAM(req), cJSON** res)
 
   int ret = wpaControl_command("STATUS", buff);
   if (ret)
+  {
     *res = wpaControl_createError(ret);
+  }
   else
+  {
     *res = wpaControl_createResponse(buff);
+  }
 
   return 0;
 }
@@ -327,25 +335,28 @@ wpaControl_createResponse(std::string const& s)
 {
   cJSON* res = cJSON_CreateObject();
 
-  size_t begin = 0;
-  while (true)
+  if (!s.empty())
   {
-    size_t end = s.find('\n', begin);
-    if (end == std::string::npos)
-      break;
-
-    std::string line(s.substr(begin, (end - begin)));
-    size_t mid = line.find('=');
-
-    if (mid != std::string::npos)
+    size_t begin = 0;
+    while (true)
     {
-      std::string name(line.substr(0, mid));
-      std::string value(line.substr(mid + 1));
+      size_t end = s.find('\n', begin);
+      if (end == std::string::npos)
+        break;
 
-      cJSON_AddItemToObject(res, name.c_str(), cJSON_CreateString(value.c_str()));
+      std::string line(s.substr(begin, (end - begin)));
+      size_t mid = line.find('=');
+
+      if (mid != std::string::npos)
+      {
+        std::string name(line.substr(0, mid));
+        std::string value(line.substr(mid + 1));
+
+        cJSON_AddItemToObject(res, name.c_str(), cJSON_CreateString(value.c_str()));
+      }
+
+      begin = end + 1;
     }
-
-    begin = end + 1;
   }
 
   return res;

@@ -23,6 +23,8 @@
 #include "util.h"
 
 #include <getopt.h>
+#include <unistd.h>
+
 #include <fstream>
 #include <streambuf>
 #include <iostream>
@@ -236,7 +238,11 @@ namespace
       #endif
       cJSON_Deleter req_deleter(req);
 
-      cJSON* response = nullptr;
+      cJSON* response_envelope = nullptr;
+
+      response_envelope = cJSON_CreateObject();
+      cJSON_AddItemToObject(response_envelope, "jsonrpc", cJSON_CreateString(JSON_RPC_VERSION));
+
       cJSON* method = cJSON_GetObjectItem(req, "method");
       if (!method)
       {
@@ -251,36 +257,49 @@ namespace
         // TODO: respond with bad request
       }
 
+      cJSON_AddItemToObject(response_envelope, "id", cJSON_CreateNumber(id->valueint));
+
       try
       {
         jsonRpcFunction func = jsonRpc_findFunction(method->valuestring);
         if (func)
         {
+          cJSON* rpc_response = nullptr;
           XLOG_INFO("found %s and executing", method->valuestring);
 
-          cJSON* temp = cJSON_CreateObject();
-          cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString(JSON_RPC_VERSION));
-          cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(id->valueint));
-
-          int ret = func(req, &response);
+          int ret = func(req, &rpc_response);
           if (ret)
-            cJSON_AddItemToObject(response, "error", temp);
+          {
+            // TODO:
+            // cJSON_AddItemToObject(response_envelope, "error", temp);
+          }
           else
-            cJSON_AddItemToObject(response, "result", temp);
+          {
+            cJSON_AddItemToObject(response_envelope, "result", rpc_response);
+          }
+          // cJSON_Delete(rpc_response);
         }
         else
         {
           XLOG_ERROR("failed to find registered function %s", method->valuestring);
         }
 
+        char* s = cJSON_Print(response_envelope);
+        XLOG_INFO("response:%s", s);
+        free(s);
+
         std::lock_guard<std::mutex> guard(m_mutex);
         if (m_client)
-          m_client->enqueueForSend(response);
+        {
+          m_client->enqueueForSend(response_envelope);
+        }
       }
       catch (std::exception const& err)
       {
         XLOG_ERROR("failed to queue response for send. %s", err.what());
       }
+      if (response_envelope)
+        cJSON_Delete(response_envelope);
     }
 
     void registerRpcFunctions()
@@ -296,6 +315,24 @@ namespace
     std::mutex                  m_mutex;
   };
 }
+
+void*
+run_test(void* argp)
+{
+  sleep(2);
+
+  RpcDispatcher* dispatcher = (RpcDispatcher *) argp;
+
+  cJSON* req = cJSON_CreateObject();
+  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
+  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
+  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(1234));
+  dispatcher->onIncomingMessage(req);
+
+  return NULL;
+}
+
+
 
 int main(int argc, char* argv[])
 {
@@ -339,6 +376,10 @@ int main(int argc, char* argv[])
     XLOG_ERROR("wpaControl_init failed, code = %d", wpa_init_ret);
     exit(1);
   }
+
+  // TODO: add command line to run various tests
+  // pthread_t thread;
+  // pthread_create(&thread, nullptr, &run_test, &rpc_dispatcher);
 
   DIS_dumpProvider();
   while (true)
