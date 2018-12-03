@@ -57,25 +57,48 @@ wpaControl_init(char const* control_socket, ResponseSender const& sender)
 
   enqueue_async_message = sender;
 
-  std::string         wpa_socket_name = control_socket;
-  struct wpa_ctrl*    wpa_notify = nullptr;
+  std::string wpa_socket_name = control_socket;
+  struct wpa_ctrl* wpa_notify = nullptr;
 
-  pipe2(wpa_shutdown_pipe, O_CLOEXEC);
+  int ret = pipe2(wpa_shutdown_pipe, O_CLOEXEC);
+  if (ret == -1)
+  {
+    int err = errno;
+    XLOG_ERROR("failed to create shutdown pipe. %s", strerror(err));
+    return err;
+  }
 
   wpa_request = wpa_ctrl_open(wpa_socket_name.c_str());
   if (!wpa_request) 
-    return errno;
+  {
+    int err = errno;
+    XLOG_ERROR("failed to open:%s. %s", wpa_socket_name.c_str(), strerror(err));
+    return err;
+  }
+  else
+  {
+    XLOG_INFO("wpa request socket:%s opened for synchronous requests", wpa_socket_name.c_str());
+  }
+
 
   wpa_notify = wpa_ctrl_open(wpa_socket_name.c_str());
   if (!wpa_notify) 
   {
     int err = errno;
+    XLOG_ERROR("failed to open notify socket:%s. %s", wpa_socket_name.c_str(), strerror(err));
     if (wpa_request)
+    {
       wpa_ctrl_close(wpa_request);
+      wpa_request = nullptr;
+    }
     return err;
   }
-  wpa_ctrl_attach(wpa_notify);
+  else
+  {
+    XLOG_INFO("wpa request socket:%s opened for notification", wpa_socket_name.c_str());
+  }
 
+  wpa_ctrl_attach(wpa_notify);
   pthread_create(&wpa_notify_thread, nullptr, &wpa_notify_read, wpa_notify);
 
   return 0;
@@ -140,6 +163,12 @@ wpaControl_command(char const* cmd, std::string& res)
   size_t n = res.capacity();
 
   XLOG_INFO("wpa command:%s", cmd);
+  if (!wpa_request)
+  {
+    XLOG_ERROR("request handle is null");
+    return -EINVAL;
+  }
+
   int ret = wpa_ctrl_request(wpa_request, cmd, strlen(cmd), &res[0], &n, nullptr);
   if (ret < 0)
   {

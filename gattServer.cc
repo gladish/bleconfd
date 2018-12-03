@@ -301,13 +301,11 @@ GattClient::buildJsonRpcService()
   bt_uuid_t uuid;
 
   bt_string_to_uuid(&uuid, kUuidRpcService.c_str());
-  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 5);
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 25);
   if (!service)
   {
     XLOG_CRITICAL("failed to add rpc service to gatt db");
   }
-
-  // gatt_db_attribute_get_handle(service); do we need this handle?
 
   // data channel
   bt_string_to_uuid(&uuid, kUuidRpcInbox.c_str());
@@ -330,8 +328,18 @@ GattClient::buildJsonRpcService()
   m_blepoll = gatt_db_service_add_characteristic(
     service,
     &uuid,
-    BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
+    BT_ATT_PERM_READ,
     BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_NOTIFY,
+    &GattClient_onEPollRead,
+    nullptr,
+    this);
+  m_notify_handle = gatt_db_attribute_get_handle(m_blepoll);
+
+  bt_uuid16_create(&uuid, GATT_CLIENT_CHARAC_CFG_UUID);
+  gatt_db_service_add_descriptor(
+    service,
+    &uuid,
+    BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
     &GattClient_onEPollRead,
     nullptr,
     this);
@@ -364,7 +372,7 @@ GattClient::onDataChannelIn(
 
     if (c == kRecordDelimiter)
     {
-      XLOG_INFO("found end of record, dispatching requeste");
+      XLOG_INFO("found end of record, dispatching request");
       cJSON* req = cJSON_Parse(&m_incoming_buff[0]);
       if (!req)
       {
@@ -378,7 +386,10 @@ GattClient::onDataChannelIn(
           // TODO:
           XLOG_WARN("no data handler registered");
         }
-        m_data_handler(req);
+        else
+        {
+          m_data_handler(req);
+        }
       }
       m_incoming_buff.clear();
     }
@@ -611,6 +622,7 @@ GattClient::addDeviceInfoCharacteristic(
   if (!attr)
   {
     XLOG_CRITICAL("failed to create DIS characteristic %u", id);
+    return;
   }
 
   std::string value;
@@ -630,7 +642,10 @@ GattClient::buildDeviceInfoService()
   bt_uuid_t uuid;
   bt_uuid16_create(&uuid, kUuidDeviceInfoService);
 
-  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 14); // what's the 14?
+  // TODO: I don't know what the end value is for. The last call here to add
+  // the manufacturer name was failing, but when I upp'ed it from 14 to 30
+  // the error went away. Not sure what's going on?
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 30);
 
   addDeviceInfoCharacteristic(service, kUuidSystemId, m_dis_provider.get_system_id);
   addDeviceInfoCharacteristic(service, kUuidModelNumber, m_dis_provider.get_model_number);
@@ -650,20 +665,26 @@ GattClient::onTimeout()
 
   if (bytes_available > 0)
   {
+    XLOG_INFO("notification of %u bytes available", bytes_available);
+
     bytes_available = htonl(bytes_available);
 
-    uint16_t handle = gatt_db_attribute_get_handle(m_blepoll);
+    //uint16_t handle = gatt_db_attribute_get_handle(m_blepoll);
+    uint16_t handle = m_notify_handle;
     int ret = bt_gatt_server_send_notification(
       m_server,
       handle,
       reinterpret_cast<uint8_t *>(&bytes_available),
       sizeof(uint32_t));
 
-    if (ret)
+    if (!ret)
     {
-      XLOG_WARN("failed to send notification:%d", ret);
+      XLOG_WARN("failed to send notification:%d with %u bytes pending",
+        ret, bytes_available);
     }
   }
+
+  mainloop_modify_timeout(m_timeout_id, 1000);
 }
 
 void
