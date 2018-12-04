@@ -17,8 +17,6 @@
 #include "gattServer.h"
 #include "xLog.h"
 #include "beacon.h"
-#include "appSettings.h"
-#include "blepacket.h"
 
 #include <exception>
 #include <sstream>
@@ -39,6 +37,8 @@ extern "C"
 
 namespace
 {
+  char ServerName[64]                     {"TheUnknownServer"};
+  char const      kRecordDelimiter        {30};
   uint16_t const kUuidDeviceInfoService   {0x180a};
   static const uint16_t kUuidGap          {0x1800};
   static const uint16_t kUuidGatt         {0x1801};
@@ -53,9 +53,7 @@ namespace
 
   std::string const kUuidRpcService       {"503553ca-eb90-11e8-ac5b-bb7e434023e8"};
   std::string const kUuidRpcInbox         {"510c87c8-eb90-11e8-b3dc-17292c2ecc2d"};
-  std::string const kUuidRpcOutbox        {"5140f882-eb90-11e8-a835-13d2bd922d3f"};
-
-  std::string const kOutgoingDataMessage  {"outgoing-data"};
+  std::string const kUuidRpcEPoll         {"5140f882-eb90-11e8-a835-13d2bd922d3f"};
 
   void DIS_writeCallback(gatt_db_attribute* UNUSED_PARAM(attr), int err, void* UNUSED_PARAM(argp))
   {
@@ -110,6 +108,81 @@ namespace
     XLOG_ERROR("exception:%s", message.c_str());
     throw std::runtime_error(message);
   }
+
+  void GattClient_onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onGapRead(attr, id, offset, opcode, att);
+  }
+
+  void GattClient_onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onGapWrite(attr, id, offset, data, len, opcode, att);
+  }
+
+  void GattClient_onServiceChanged(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onServiceChanged(attr, id, offset, opcode, att);
+  }
+
+  void GattClient_onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onServiceChangedRead(attr, id, offset, opcode, att);
+  }
+
+  void GattClient_onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* value, size_t len, uint8_t opcode, bt_att* att, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onServiceChangedWrite(attr, id, offset, value, len, opcode, att);
+  }
+
+  void GattClient_onGapExtendedPropertiesRead(gatt_db_attribute *attr, uint32_t id,
+    uint16_t offset, uint8_t opcode, bt_att* att, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onGapExtendedPropertiesRead(attr, id, offset, opcode, att);
+  }
+
+  void GattClient_onClientDisconnected(int err, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onClientDisconnected(err);
+  }
+
+  void GattClient_onEPollRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onEPollRead(attr, id, offset, opcode, att);
+  }
+
+  void GattClient_onDataChannelIn(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onDataChannelIn(attr, id, offset, data, len, opcode, att);
+  }
+
+  void GattClient_onDataChannelOut(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att, void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onDataChannelOut(attr, id, offset, opcode, att);
+  }
+
+  void GattClient_onTimeout(int UNUSED_PARAM(fd), void* argp)
+  {
+    GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+    clnt->onTimeout();
+  }
 }
 
 GattServer::GattServer()
@@ -158,8 +231,8 @@ GattServer::init()
 std::shared_ptr<GattClient>
 GattServer::accept(GattClient::DeviceInfoProvider const& p)
 {
-  std::string bleName(appSettings_get_ble_value("ble_name"));
-  startBeacon(bleName);
+  // clean all connection
+  reinitializeBLE();
   mainloop_init();
 
   sockaddr_l2 peer_addr;
@@ -187,10 +260,24 @@ GattClient::init(DeviceInfoProvider const& p)
 {
   m_dis_provider = p;
   m_att = bt_att_new(m_fd, 0);
+  if (!m_att)
+  {
+    XLOG_ERROR("failed to create new att:%d", errno);
+  }
+
   bt_att_set_close_on_unref(m_att, true);
-  bt_att_register_disconnect(m_att, &GattClient::disconnectCallback, this, nullptr);
+  bt_att_register_disconnect(m_att, &GattClient_onClientDisconnected, this, nullptr);
   m_db = gatt_db_new();
+  if (!m_db)
+  {
+    XLOG_ERROR("failed to create gatt database");
+  }
+
   m_server = bt_gatt_server_new(m_db, m_att, m_mtu);
+  if (!m_server)
+  {
+    XLOG_ERROR("failed to create gatt server");
+  }
 
   if (true)
   {
@@ -198,11 +285,7 @@ GattClient::init(DeviceInfoProvider const& p)
     bt_gatt_server_set_debug(m_server, GATT_debugCallback, this, nullptr);
   }
 
-  int ret = pipe2(m_pipe, O_CLOEXEC);
-  if (ret < 0)
-    throw_errno(errno, "failed to create notification pipe");
-
-  mainloop_add_fd(m_pipe[0], EPOLLIN, &GattClient::onAsyncMessage, this, nullptr);
+  m_timeout_id = mainloop_add_timeout(1000, &GattClient_onTimeout, this, nullptr);
   buildGattDatabase();
 }
 
@@ -221,132 +304,177 @@ GattClient::buildJsonRpcService()
   bt_uuid_t uuid;
 
   bt_string_to_uuid(&uuid, kUuidRpcService.c_str());
-  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 16);
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 25);
+  if (!service)
+  {
+    XLOG_CRITICAL("failed to add rpc service to gatt db");
+  }
 
-  // inbox
+  // data channel
   bt_string_to_uuid(&uuid, kUuidRpcInbox.c_str());
-  m_inbox = gatt_db_service_add_characteristic(
+  m_data_channel = gatt_db_service_add_characteristic(
     service,
     &uuid,
     BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
-    BT_GATT_CHRC_PROP_WRITE,
-    nullptr,
-    &GattClient::onInboxWrite, // remote client is writing to inbox
+    BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_WRITE,
+    &GattClient_onDataChannelOut,
+    &GattClient_onDataChannelIn,
     this);
 
-  // outbox
-  bt_string_to_uuid(&uuid, kUuidRpcOutbox.c_str());
-  m_outbox = gatt_db_service_add_characteristic(
+  if (!m_data_channel)
+  {
+    XLOG_CRITICAL("failed to create inbox characteristic");
+  }
+
+  // blepoll
+  bt_string_to_uuid(&uuid, kUuidRpcEPoll.c_str());
+  m_blepoll = gatt_db_service_add_characteristic(
+    service,
+    &uuid,
+    BT_ATT_PERM_READ,
+    BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_NOTIFY,
+    &GattClient_onEPollRead,
+    nullptr,
+    this);
+  m_notify_handle = gatt_db_attribute_get_handle(m_blepoll);
+
+  bt_uuid16_create(&uuid, GATT_CLIENT_CHARAC_CFG_UUID);
+  gatt_db_service_add_descriptor(
     service,
     &uuid,
     BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
-    BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_NOTIFY,
-    &GattClient::onOutboxRead, // remote client is reading from outbox
+    &GattClient_onEPollRead,
     nullptr,
     this);
+
+  if (!m_blepoll)
+  {
+    XLOG_CRITICAL("failed to create ble poll indicator characteristic");
+  }
 
   gatt_db_service_set_active(service, true);
 }
 
 void
-GattClient::onInboxWrite(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
-  uint16_t offset, uint8_t const* data, size_t len, uint8_t UNUSED_PARAM(opcode),
-  bt_att* UNUSED_PARAM(att), void* argp)
+GattClient::onDataChannelIn(
+  gatt_db_attribute*    attr,
+  uint32_t              id,
+  uint16_t              offset,
+  uint8_t const*        data,
+  size_t                len,
+  uint8_t               UNUSED_PARAM(opcode),
+  bt_att*               UNUSED_PARAM(att))
 {
-  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
-  clnt->onInboxWrite(id, data, offset, len);
-}
+  XLOG_INFO("onDataChannelIn(offset=%d, len=%zd)", offset, len);
 
-void
-GattClient::onInboxWrite(uint32_t id, uint8_t const* data, uint16_t offset, size_t len)
-{
-  XLOG_INFO("onInboxWrite id = %d, offset = %d, len = %d",id,offset,len);
-
-
-  // new buffer with new length
-  uint8_t * new_buffer = static_cast<uint8_t *>(malloc(m_rpc_buffer_len + len)); 
-  if (m_rpc_buffer && m_rpc_buffer_len > 0) 
+  // TODO: should this use memory_stream?
+  for (size_t i = 0; i < len; ++i)
   {
-    // copy old data
-    memcpy(new_buffer, m_rpc_buffer, m_rpc_buffer_len);
-    free(m_rpc_buffer); // clear old buffer
-    XLOG_DEBUG("copy old cache buffer to new buffer, len = %d", m_rpc_buffer_len);
-  }
+    char c = static_cast<char>(data[i + offset]);
+    m_incoming_buff.push_back(c);
 
-  // copy new data
-  memcpy(new_buffer + m_rpc_buffer_len, data + offset, len);
-
-  // set buffer and length
-  m_rpc_buffer = new_buffer;
-  m_rpc_buffer_len = m_rpc_buffer_len + len; 
-  XLOG_DEBUG("new buffer created, len = %d, h1=%d, h2=%d", m_rpc_buffer_len, *(m_rpc_buffer), *(m_rpc_buffer + 1));
-
-  // get message entity from buffer
-  if (BLEPacket::isContainsHeader(m_rpc_buffer))
-  {
-    XLOG_DEBUG("found a new message header");
-    int payloadLength = BLEPacket::frameLengthFromHeader(*reinterpret_cast<int *>(m_rpc_buffer));
-    if (payloadLength + HEADER_LENGTH <= (int)m_rpc_buffer_len)
+    if (c == kRecordDelimiter)
     {
-      XLOG_DEBUG("found a new message payload len = %d, header_len = %d, cache buffer len = %d", payloadLength, HEADER_LENGTH, m_rpc_buffer_len);
-      char* payload = static_cast<char*>(malloc(payloadLength + 1));
-      memcpy(payload, m_rpc_buffer + HEADER_LENGTH, payloadLength);
-      payload[payloadLength] = '\0';
-      // rebuild cache buffer
-      int left_len = m_rpc_buffer_len - payloadLength - HEADER_LENGTH;
-      if (left_len <= 0) 
+      XLOG_INFO("found end of record, dispatching request");
+      cJSON* req = cJSON_Parse(&m_incoming_buff[0]);
+      if (!req)
       {
-        free(m_rpc_buffer);
-        m_rpc_buffer = nullptr;
-        m_rpc_buffer_len = 0;
-      } else 
-      {
-        new_buffer = static_cast<uint8_t *>(malloc(left_len));
-        memcpy(new_buffer, m_rpc_buffer + payloadLength + HEADER_LENGTH, left_len);
-        free(m_rpc_buffer);
-        m_rpc_buffer = new_buffer;
-        m_rpc_buffer_len = left_len;
+        // TODO
+        XLOG_ERROR("failed to parse incoming json");
       }
-
-      XLOG_DEBUG("resize rpc cache buffer, length = %d", m_rpc_buffer_len);
-      XLOG_DEBUG("new message = %s\n", payload);
-      cJSON* req = cJSON_Parse(payload);
-
-      // let rpc dispatcher process it
-      m_data_handler(req);
-
-      // free payload char array
-      free(payload);
-
-    } else 
-    {
-       XLOG_DEBUG("the rpc cache buffer length not enough for a full message");
+      else
+      {
+        if (!m_data_handler)
+        {
+          // TODO:
+          XLOG_WARN("no data handler registered");
+        }
+        else
+        {
+          m_data_handler(req);
+        }
+      }
+      m_incoming_buff.clear();
     }
   }
+
+  gatt_db_attribute_write_result(attr, id, 0);
 }
 
 void
-GattClient::onOutboxRead(gatt_db_attribute* UNUSED_PARAM(attr), uint32_t id,
-  uint16_t offset, uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
+GattClient::onDataChannelOut(
+  gatt_db_attribute*    attr,
+  uint32_t              id,
+  uint16_t              offset,
+  uint8_t               opcode,
+  bt_att*               UNUSED_PARAM(att))
 {
-  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
-  clnt->onOutboxRead(id, offset);
-}
+  XLOG_INFO("onDataChannelOut(id=%d, offset=%u, opcode=%d)",
+    id, offset, opcode);
 
-void
-GattClient::onOutboxRead(uint32_t id, uint16_t offset)
-{
-  if (m_outbox_buffer_len > 0)
+  static int32_t const kBufferSize = 1024;
+  static uint8_t buff[kBufferSize];
+
+  int n = 0;
+
+  if (offset == 0)
   {
-    int left_length = m_outbox_buffer_len - offset;
-    gatt_db_attribute_read_result(m_outbox, id, 0, m_outbox_buffer + offset, left_length);
+    bool end_of_record = false;
 
-    if (offset + m_mtu >= m_outbox_buffer_len)
-    {
-      free(m_outbox_buffer);
-      m_outbox_buffer_len = 0;
-    }
+    memset(buff, 0, sizeof(buff));
+    n = m_outgoing_queue.get_line((char *)buff, kBufferSize - 1, &end_of_record);
+    if (end_of_record)
+      buff[n] = kRecordDelimiter;
   }
+  else
+  {
+    int bytesToWrite = 0;
+    while ((bytesToWrite < kBufferSize) && (buff[bytesToWrite] != kRecordDelimiter))
+      bytesToWrite++;
+    bytesToWrite += 1;
+
+    n = bytesToWrite - offset;
+    XLOG_INFO("bytesToWrite:%d offset:%d n:%d", bytesToWrite, offset, n);
+  }
+
+  uint8_t const* value = nullptr;
+  if (n > 0)
+    value = buff + offset;
+  else
+    buff[0] = '\0';
+
+  gatt_db_attribute_read_result(attr, id, 0, value, n);
+}
+
+void
+GattClient::onEPollRead(
+  gatt_db_attribute*    attr,
+  uint32_t              id,
+  uint16_t              offset,
+  uint8_t               opcode,
+  bt_att*               UNUSED_PARAM(att))
+{
+  uint32_t value = m_outgoing_queue.size();
+
+  XLOG_DEBUG("onEPollRead(offset=%d, opcode=%d)", offset, opcode);
+
+  value = htonl(value);
+  gatt_db_attribute_read_result(attr, id, 0, reinterpret_cast<uint8_t const *>(&value),
+    sizeof(value));
+}
+
+void
+GattClient::onGapExtendedPropertiesRead(
+  struct gatt_db_attribute*     attr,
+  uint32_t                      id,
+  uint16_t         UNUSED_PARAM(offset),
+  uint8_t          UNUSED_PARAM(opcode),
+  struct bt_att*   UNUSED_PARAM(att))
+{
+  uint8_t value[2];
+  value[0] = BT_GATT_CHRC_EXT_PROP_RELIABLE_WRITE;
+  value[1] = 0;
+  gatt_db_attribute_read_result(attr, id, 0, value, sizeof(value));
 }
 
 void
@@ -361,11 +489,11 @@ GattClient::buildGapService()
   bt_uuid16_create(&uuid, GATT_CHARAC_DEVICE_NAME);
   gatt_db_service_add_characteristic(service, &uuid, BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
     BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_EXT_PROP,
-    &GattClient::onGapRead, &GattClient::onGapWrite, this);
+    &GattClient_onGapRead, &GattClient_onGapWrite, this);
 
   bt_uuid16_create(&uuid, GATT_CHARAC_EXT_PROPER_UUID);
   gatt_db_service_add_descriptor(service, &uuid, BT_ATT_PERM_READ,
-    nullptr, nullptr, this);
+    &GattClient_onGapExtendedPropertiesRead, nullptr, this);
 
   // appearance
   bt_uuid16_create(&uuid, GATT_CHARAC_APPEARANCE);
@@ -382,25 +510,62 @@ GattClient::buildGapService()
 
 void
 GattClient::onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp)
+    uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att))
 {
   XLOG_DEBUG("onGapRead %04x", id);
-  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
-  // TODO:
+
+  uint8_t error = 0;
+  size_t len = strlen(ServerName);
+  if (offset > len)
+  {
+    error = BT_ATT_ERROR_INVALID_OFFSET;
+  }
+  else
+  {
+    error = 0;
+    len -= offset;
+    uint8_t const* value = nullptr;
+    if (len)
+    {
+      value = reinterpret_cast<uint8_t const *>(ServerName + offset);
+    }
+    gatt_db_attribute_read_result(attr, id, error, value, len);
+  }
 }
 
+
 void
-GattClient::onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t const* data, size_t len, uint8_t opecode, bt_att* att, void* argp)
+GattClient::onGapWrite(
+  gatt_db_attribute*  attr,
+  uint32_t            id,
+  uint16_t            offset,
+  uint8_t const*      data,
+  size_t              len,
+  uint8_t             UNUSED_PARAM(opcode),
+  bt_att*             UNUSED_PARAM(att))
 {
   XLOG_DEBUG("onGapWrite");
-  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
-  // TODO:
+
+  uint8_t error = 0;
+  if ((offset + len) == 0)
+  {
+    memset(ServerName, 0, sizeof(ServerName));
+  }
+  else if (offset > sizeof(ServerName))
+  {
+    error = BT_ATT_ERROR_INVALID_OFFSET;
+  }
+  else
+  {
+    memcpy(ServerName + offset, data, len);
+  }
+
+  gatt_db_attribute_write_result(attr, id, error);
 }
 
 void
 GattClient::onServiceChanged(gatt_db_attribute* attr, uint32_t id, uint16_t UNUSED_PARAM(offset),
-    uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* UNUSED_PARAM(argp))
+    uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att))
 {
   XLOG_DEBUG("onServiceChanged");
   gatt_db_attribute_read_result(attr, id, 0, nullptr, 0);
@@ -417,24 +582,23 @@ GattClient::buildGattService()
   bt_uuid16_create(&uuid, GATT_CHARAC_SERVICE_CHANGED);
   gatt_db_service_add_characteristic(service, &uuid, BT_ATT_PERM_READ,
       BT_GATT_CHRC_PROP_READ | BT_GATT_CHRC_PROP_INDICATE,
-      GattClient::onServiceChanged, nullptr, this);
+      GattClient_onServiceChanged, nullptr, this);
 
   bt_uuid16_create(&uuid, GATT_CLIENT_CHARAC_CFG_UUID);
   gatt_db_service_add_descriptor(service, &uuid, BT_ATT_PERM_READ | BT_ATT_PERM_WRITE,
-      GattClient::onServiceChangedRead, GattClient::onServiceChangedWrite, this);
+      GattClient_onServiceChangedRead, GattClient_onServiceChangedWrite, this);
 
   gatt_db_service_set_active(service, true);
 }
 
 void
 GattClient::onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t UNUSED_PARAM(offset),
-  uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
+  uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att))
 {
   XLOG_DEBUG("onServiceChangedRead");
-  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
 
   uint8_t value[2] {0x00, 0x00};
-  if (clnt->m_service_change_enabled)
+  if (m_service_change_enabled)
     value[0] = 0x02;
   gatt_db_attribute_read_result(attr, id, 0, value, sizeof(value));
 }
@@ -442,10 +606,9 @@ GattClient::onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t 
 void
 GattClient::onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t const* value, size_t len,
-    uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att), void* argp)
+    uint8_t UNUSED_PARAM(opcode), bt_att* UNUSED_PARAM(att))
 {
   XLOG_DEBUG("onServiceChangeWrite");
-  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
 
   uint8_t ecode = 0;
   if (!value || (len != 2))
@@ -457,9 +620,9 @@ GattClient::onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t
   if (!ecode)
   {
     if (value[0] == 0x00)
-      clnt->m_service_change_enabled = false;
+      m_service_change_enabled = false;
     else if (value[0] == 0x02)
-      clnt->m_service_change_enabled = true;
+      m_service_change_enabled = true;
     else
       ecode = 0x80;
   }
@@ -478,9 +641,11 @@ GattClient::addDeviceInfoCharacteristic(
 
   gatt_db_attribute* attr = gatt_db_service_add_characteristic(service, &uuid, BT_ATT_PERM_READ,
     BT_GATT_CHRC_PROP_READ, nullptr, nullptr, this);
+
   if (!attr)
   {
-    // TODO
+    XLOG_CRITICAL("failed to create DIS characteristic %u", id);
+    return;
   }
 
   std::string value;
@@ -500,7 +665,10 @@ GattClient::buildDeviceInfoService()
   bt_uuid_t uuid;
   bt_uuid16_create(&uuid, kUuidDeviceInfoService);
 
-  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 14); // what's the 14?
+  // TODO: I don't know what the end value is for. The last call here to add
+  // the manufacturer name was failing, but when I upp'ed it from 14 to 30
+  // the error went away. Not sure what's going on?
+  gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 30);
 
   addDeviceInfoCharacteristic(service, kUuidSystemId, m_dis_provider.get_system_id);
   addDeviceInfoCharacteristic(service, kUuidModelNumber, m_dis_provider.get_model_number);
@@ -514,28 +682,32 @@ GattClient::buildDeviceInfoService()
 }
 
 void
-GattClient::onAsyncMessage(int fd, uint32_t UNUSED_PARAM(events), void* argp)
+GattClient::onTimeout()
 {
-  GattClient* clnt = reinterpret_cast<GattClient *>(argp);
+  uint32_t bytes_available = m_outgoing_queue.size();
 
-  char buff[64] = {0};
+  if (bytes_available > 0)
+  {
+    XLOG_INFO("notification of %u bytes available", bytes_available);
 
-  int ret = read(fd, buff, sizeof(buff));
-  if (ret < 0)
-  {
-    XLOG_ERROR("error reading from pipe:%s", strerror(errno));
-    return;
+    bytes_available = htonl(bytes_available);
+
+    //uint16_t handle = gatt_db_attribute_get_handle(m_blepoll);
+    uint16_t handle = m_notify_handle;
+    int ret = bt_gatt_server_send_notification(
+      m_server,
+      handle,
+      reinterpret_cast<uint8_t *>(&bytes_available),
+      sizeof(uint32_t));
+
+    if (!ret)
+    {
+      XLOG_WARN("failed to send notification:%d with %u bytes pending",
+        ret, bytes_available);
+    }
   }
-  
-  XLOG_DEBUG("onAsyncMessage evt, buff = %s", buff);
-  if (strcmp(buff, kOutgoingDataMessage.c_str()) == 0)
-  {
-    clnt->processOutgoingMessageQueue();
-  }
-  else
-  {
-    XLOG_WARN("unknown async message:%s", buff);
-  }
+
+  mainloop_modify_timeout(m_timeout_id, 1000);
 }
 
 void
@@ -543,73 +715,30 @@ GattClient::run()
 {
   m_mainloop_thread = std::this_thread::get_id();
 
-  // Is there any way to use glib mainloop? we're using the bluez
-  // built-in event loop
+  sigset_t mask;
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGTERM);
+
   mainloop_run();
-}
-
-void
-GattClient::processOutgoingMessageQueue()
-{
-  // This should be on the mainloop_ run() thread
-  assert( std::this_thread::get_id() == m_mainloop_thread );
-
-  cJSON* next_outgoing_message = nullptr;
-
-  while (true)
-  {
-    {
-      std::lock_guard<std::mutex> guard(m_mutex);
-      if (m_outgoing_queue.empty())
-        return;
-
-      next_outgoing_message = m_outgoing_queue.front();
-      m_outgoing_queue.pop();
-    }
-
-    if (next_outgoing_message)
-    {
-      char* payload = cJSON_PrintUnformatted(next_outgoing_message);
-      size_t len = strlen(payload);
-
-      int packet_len = len;
-      BLEPacket::Fragmenter fragmenter(payload, len, len);
-      uint8_t* buffer = static_cast<uint8_t*>(malloc(len + HEADER_LENGTH));
-      fragmenter.nextFrameWithHeader(buffer, &packet_len);
-      packet_len = packet_len + 4;
-
-      
-
-      XLOG_DEBUG("processOutgoingMessageQueue payload = %s, m_mtu = %d, payload length = %d, body length = %d", payload, m_mtu, len, packet_len);
-      
-      uint8_t* outbox_buffer = static_cast<uint8_t *>(malloc(m_outbox_buffer_len + packet_len));
-      if (m_outbox_buffer && m_outbox_buffer_len > 0) 
-      {
-        memcpy(outbox_buffer, m_outbox_buffer, m_outbox_buffer_len);
-        free(m_outbox_buffer); // free outbox buffer
-      }
-      memcpy(outbox_buffer + m_outbox_buffer_len, buffer, packet_len);
-
-      m_outbox_buffer = outbox_buffer;
-      m_outbox_buffer_len = m_outbox_buffer_len + packet_len;
-
-      free(buffer); // packet buffer
-      cJSON_Delete(next_outgoing_message);
-    }
-  }
 }
 
 GattClient::GattClient(int fd)
   : m_fd(fd)
-  , m_mtu(23)  // default BLE mtu
-  , m_rpc_buffer(nullptr)
-  , m_rpc_buffer_len(0)
-  , m_outbox_buffer(nullptr)
-  , m_outbox_buffer_len(0)
+  , m_att(nullptr)
+  , m_db(nullptr)
+  , m_server(nullptr)
+  , m_mtu(16)
+  , m_outgoing_queue(kRecordDelimiter)
+  , m_incoming_buff()
+  , m_data_handler(nullptr)
+  , m_data_channel(nullptr)
+  , m_blepoll(nullptr)
   , m_service_change_enabled(false)
+  , m_timeout_id(-1)
+  , m_mainloop_thread()
 {
 }
-
 
 GattClient::~GattClient()
 {
@@ -621,33 +750,24 @@ GattClient::~GattClient()
 
   if (m_db)
     gatt_db_unref(m_db);
-  
-  if (m_rpc_buffer_len > 0)
-    free(m_rpc_buffer);
-  
-  if (m_outbox_buffer_len > 0)
-    free(m_outbox_buffer);
 }
 
 void
-GattClient::enqueueForSend(cJSON* json)
+GattClient::enqueueForSend(cJSON const* json)
 {
+  if (!json)
   {
-    std::lock_guard<std::mutex> guard(m_mutex);
-    m_outgoing_queue.push(json);
+    XLOG_INFO("trying to enqueue null json document");
+    return;
   }
 
-  // signal mainloop_run() thread of pending outgoing message
-  XLOG_DEBUG("enqueueForSend a message, write to m_pipe");
-  int ret = write(m_pipe[1], kOutgoingDataMessage.c_str(), kOutgoingDataMessage.size());
-  if (ret < 0)
-  {
-    XLOG_WARN("write:%s", strerror(errno));
-  }
+  char* s = cJSON_PrintUnformatted(json);
+  m_outgoing_queue.put_line(s);
+  free(s);
 }
 
 void
-GattClient::disconnectCallback(int err, void* UNUSED_PARAM(argp))
+GattClient::onClientDisconnected(int err)
 {
   // TODO: we should stash the remote client as a member of the
   // GattClient so we can print out mac addres of client that

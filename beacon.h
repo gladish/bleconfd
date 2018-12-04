@@ -26,4 +26,9 @@
  */
 void startBeacon(std::string const& s);
 
+/**
+ * we need clean all BLE connection and staus when ready to accept new client
+ */
+void reinitializeBLE();
+
 #endif

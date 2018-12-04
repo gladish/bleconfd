@@ -1,0 +1,10 @@
+BUILD
+
+1. Set these three
+
+export HOSTAPD_HOME=/home/pi/work/hostap
+export BLUEZ_HOME=/home/pi/work/bluez-5.47
+export CJSON_HOME=/home/pi/work/cJSON
+
+2. make
+

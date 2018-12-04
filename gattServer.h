@@ -16,10 +16,13 @@
 #ifndef __GATT_SERVER_H__
 #define __GATT_SERVER_H__
 
+#include <list>
 #include <memory>
-#include <mutex>
 #include <thread>
-#include <queue>
+#include <vector>
+#include <sstream>
+
+#include "memory_stream.h"
 
 extern "C" 
 {
@@ -56,38 +59,43 @@ public:
 
   void init(DeviceInfoProvider const& p);
   void run();
-  void enqueueForSend(cJSON* json);
+  void enqueueForSend(cJSON const* json);
 
   inline void setDataHandler(data_handler h)
     { m_data_handler = h; }
 
+  void onDataChannelOut(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
+
+  void onDataChannelIn(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att);
+
+  void onTimeout();
+
+  void onEPollRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
+
+  void onClientDisconnected(int err);
+
+  void onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
+
+  void onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att);
+
+  void onServiceChanged(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
+
+  void onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t opcode, bt_att* att);
+
+  void onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
+    uint8_t const* value, size_t len, uint8_t opcode, bt_att* att);
+
+  void onGapExtendedPropertiesRead(gatt_db_attribute *attrib, uint32_t id,
+    uint16_t offset, uint8_t opcode, bt_att* att);
+
 private:
-  static void onAsyncMessage(int fd, uint32_t events, void* argp);
-  static void disconnectCallback(int err, void* argp);
-
-  static void onInboxWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t const* data, size_t len, uint8_t opcode, bt_att* att, void* argp);
-
-  static void onOutboxRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp);
-
-  static void onGapRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp);
-
-  static void onGapWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t const* data, size_t len, uint8_t opecode, bt_att* att, void* argp);
-
-  static void onServiceChanged(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp);
-
-  static void onServiceChangedRead(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t opcode, bt_att* att, void* argp);
-
-  static void onServiceChangedWrite(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
-    uint8_t const* value, size_t len, uint8_t opcode, bt_att* att, void* argp);
-
-private:
-  void processOutgoingMessageQueue();
   void buildGattDatabase();
 
   void buildGapService();
@@ -97,28 +105,22 @@ private:
     std::function<std::string ()> const& read_callback);
   void buildJsonRpcService();
 
-  void onInboxWrite(uint32_t id, uint8_t const* data, uint16_t offset, size_t len);
-  void onOutboxRead(uint32_t id, uint16_t offset);
-
 private:
   int                 m_fd;
   bt_att*             m_att;
   gatt_db*            m_db;
   bt_gatt_server*     m_server;
-  int                 m_pipe[2];
   uint16_t            m_mtu;
-  uint8_t*            m_rpc_buffer;
-  uint32_t            m_rpc_buffer_len;
-  uint8_t*            m_outbox_buffer;
-  uint32_t            m_outbox_buffer_len;
-  std::queue<cJSON *> m_outgoing_queue;
-  std::mutex          m_mutex;
+  memory_stream       m_outgoing_queue;
+  std::vector<char>   m_incoming_buff;
   data_handler        m_data_handler;
   DeviceInfoProvider  m_dis_provider;
-  gatt_db_attribute*  m_inbox;
-  gatt_db_attribute*  m_outbox;
-  std::thread::id     m_mainloop_thread;
+  gatt_db_attribute*  m_data_channel;
+  gatt_db_attribute*  m_blepoll;
+  uint16_t            m_notify_handle;
   bool                m_service_change_enabled;
+  int                 m_timeout_id;
+  std::thread::id     m_mainloop_thread;
 };
 
 class GattServer

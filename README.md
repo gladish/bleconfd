@@ -6,7 +6,6 @@ Messages will be small and split into frames.  The server will have an "inbox" w
 
 ### Architecture
 
-![Architecture](https://www.dropbox.com/s/8te3xgw8nef0yil/Screen%20Shot%202018-11-21%20at%205.16.52%20pm.png?raw=1)
 
 ### Target
 

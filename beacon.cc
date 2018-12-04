@@ -204,47 +204,6 @@ hex_dump(int width, unsigned char* buf, int len)
     printf("\n");
 }
 
-
-/**
- * update device name, not sure why it not worked as expected ???
- * keep it for now
- * @param hdev the device id
- * @param deviceName  the device name
- */
-void
-cmdName(int hdev, char const* deviceName)
-{
-  int dd = hci_open_dev(hdev);
-  if (dd < 0)
-  {
-    XLOG_ERROR("Can't open device hci%d: %s (%d)", hdev, strerror(errno), errno);
-    exit(1);
-  }
-
-  if (hci_write_local_name(dd, deviceName, 2000) < 0)
-  {
-    XLOG_ERROR("Can't change local name on hci%d: %s (%d)", hdev, strerror(errno), errno);
-    exit(1);
-  }
-
-  char name[249];
-  if (hci_read_local_name(dd, sizeof(name), name, 1000) < 0)
-  {
-    XLOG_ERROR("Can't read local name on hci%d: %s (%d)", hdev, strerror(errno), errno);
-    exit(1);
-  }
-
-  for (int i = 0; i < 248 && name[i]; i++)
-  {
-    if ((unsigned char) name[i] < 32 || name[i] == 127)
-      name[i] = '.';
-  }
-  name[248] = '\0';
-
-  XLOG_INFO("Device Name: '%s'", name);
-  hci_close_dev(dd);
-}
-
 string
 getDeviceNameFromFile()
 {
@@ -270,13 +229,14 @@ updateDeviceName(string const& name)
   // device name is same as new name, skip it
   if (!name.compare(getDeviceNameFromFile()))
   {
+    XLOG_INFO("current BLE name is %s", name.c_str());
     return;
   }
   char cmd_buffer[256];
   sprintf(cmd_buffer, "sh -c \"echo 'PRETTY_HOSTNAME=%s' > /etc/machine-info\"", name.c_str());
   runCommand(cmd_buffer);
   runCommand("service bluetooth restart");
-  XLOG_DEBUG("device set new name = %s", getDeviceNameFromFile().c_str());
+  XLOG_INFO("BLE set new name = %s", getDeviceNameFromFile().c_str());
 }
 
 /**
@@ -382,15 +342,31 @@ parseArgs(string str)
 }
 
 /**
- * start up beacon
- * @param s the expected device name
+ * let BLE discoverable
  */
-void
-startBeacon(std::string const& s)
+void 
+cmdScan(int ctl, int hdev, char const* opt)
 {
+	struct hci_dev_req dr;
 
-  // updateDeviceName(s.c_str());
+	dr.dev_id  = hdev;
+	dr.dev_opt = SCAN_DISABLED;
+	if (!strcmp(opt, "iscan"))
+		dr.dev_opt = SCAN_INQUIRY;
+	else if (!strcmp(opt, "pscan"))
+		dr.dev_opt = SCAN_PAGE;
+	else if (!strcmp(opt, "piscan"))
+		dr.dev_opt = SCAN_PAGE | SCAN_INQUIRY;
 
+	if (ioctl(ctl, HCISETSCAN, (unsigned long) &dr) < 0) {
+		XLOG_ERROR("Can't set scan mode on hci%d: %s (%d)", hdev, strerror(errno), errno);
+		exit(1);
+	}
+}
+
+void 
+reinitializeBLE()
+{
   int ctl = 0;
   if ((ctl = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI)) < 0)
   {
@@ -417,6 +393,7 @@ startBeacon(std::string const& s)
 
   cmdDown(ctl, di.dev_id);
   cmdUp(ctl, di.dev_id);
+  cmdScan(ctl, di.dev_id, "piscan");
   cmdNoleadv(di.dev_id);
 
   std::string startUpCmd01(appSettings_get_ble_value("ble_init_cmd01"));
@@ -425,5 +402,14 @@ startBeacon(std::string const& s)
   std::string startUpCmd02(appSettings_get_ble_value("ble_init_cmd02"));
   hcitoolCmd(di.dev_id, parseArgs(startUpCmd02));
   cmdLeadv(di.dev_id);
-  cmdName(di.dev_id, s.c_str());
+}
+
+/**
+ * start up beacon
+ * @param s the expected device name
+ */
+void
+startBeacon(std::string const& s)
+{
+  updateDeviceName(s.c_str());
 }

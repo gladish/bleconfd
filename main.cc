@@ -23,11 +23,16 @@
 #include "util.h"
 
 #include <getopt.h>
+#include <unistd.h>
+
 #include <fstream>
 #include <streambuf>
 #include <iostream>
 #include <string>
 #include <vector>
+#include <memory>
+#include <queue>
+#include <condition_variable>
 
 using std::string;
 using std::vector;
@@ -188,6 +193,8 @@ namespace
   public:
     RpcDispatcher()
     {
+      XLOG_INFO("creating dispatch thread");
+      m_dispatch_thread.reset(new std::thread([this] { this->processIncomingQueue(); }));
     }
 
     void setClient(std::shared_ptr<GattClient> const& clnt)
@@ -211,68 +218,122 @@ namespace
       stop();
     }
 
+    // for outgoing messages
     void enqueueAsyncMessage(cJSON* json)
     {
-      std::lock_guard<std::mutex> guard(m_mutex);
-      if (m_client)
-        m_client->enqueueForSend(json);
+      if (!json)
+        return;
+      {
+        std::lock_guard<std::mutex> guard(m_mutex);
+        if (m_client)
+          m_client->enqueueForSend(json);
+      }
+
+      cJSON_Delete(json);
     }
 
+    // this is called by the gatt server after reading a complete command
+    // from the client. 
     void onIncomingMessage(cJSON* req)
     {
-      #if 0
-      char* s = cJSON_Print(req);
-      if (s)
+      XLOG_INFO("enqueue new incoming request");
+      std::lock_guard<std::mutex> guard(m_mutex);
+      m_incoming_queue.push(req);
+      m_cond.notify_all();
+    }
+
+    void processIncomingQueue()
+    {
+      while (true)
       {
-        XLOG_DEBUG("incoming request\n\t%s", s);
-        free(s);
+        cJSON* req = nullptr;
+        XLOG_INFO("processing incoming queue");
+
+        {
+          std::unique_lock<std::mutex> guard(m_mutex);
+          m_cond.wait(guard, [this] { return !this->m_incoming_queue.empty(); });
+
+          if (!m_incoming_queue.empty())
+          {
+            req = m_incoming_queue.front();
+            m_incoming_queue.pop();
+          }
+        }
+
+        if (req)
+          processRequest(req);
       }
-      #endif
+    }
+
+    void processRequest(cJSON* req)
+    {
+      XLOG_INFO("processing new incoming request");
       cJSON_Deleter req_deleter(req);
 
-      cJSON* response = nullptr;
+      cJSON* response_envelope = nullptr;
+
+      response_envelope = cJSON_CreateObject();
+      cJSON_AddItemToObject(response_envelope, "jsonrpc", cJSON_CreateString(JSON_RPC_VERSION));
+
       cJSON* method = cJSON_GetObjectItem(req, "method");
       if (!method)
       {
         XLOG_ERROR("request doesn't contain method");
-        // TODO
+        // TODO: respond with bad request
       }
 
       cJSON* id = cJSON_GetObjectItem(req, "id");
       if (!id)
       {
         XLOG_ERROR("request doesn't contain id");
-        // TODO
+        // TODO: respond with bad request
       }
+
+      cJSON_AddItemToObject(response_envelope, "id", cJSON_CreateNumber(id->valueint));
 
       try
       {
         jsonRpcFunction func = jsonRpc_findFunction(method->valuestring);
         if (func)
         {
-          cJSON* temp = cJSON_CreateObject();
-          cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString(JSON_RPC_VERSION));
-          cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(id->valueint));
+          cJSON* rpc_response = nullptr;
+          XLOG_INFO("found %s and executing", method->valuestring);
 
-          int ret = func(req, &response);
+          int ret = func(req, &rpc_response);
+
+          XLOG_INFO("%s returned:%d", method->valuestring, ret);
           if (ret)
-            cJSON_AddItemToObject(response, "error", temp);
+          {
+            // TODO:
+            // cJSON_AddItemToObject(response_envelope, "error", temp);
+          }
           else
-            cJSON_AddItemToObject(response, "result", temp);
+          {
+            cJSON_AddItemToObject(response_envelope, "result", rpc_response);
+          }
+          // cJSON_Delete(rpc_response);
         }
         else
         {
           XLOG_ERROR("failed to find registered function %s", method->valuestring);
         }
 
+        char* s = cJSON_Print(response_envelope);
+        XLOG_INFO("response:%s", s);
+        free(s);
+
         std::lock_guard<std::mutex> guard(m_mutex);
         if (m_client)
-          m_client->enqueueForSend(response);
+        {
+          m_client->enqueueForSend(response_envelope);
+        }
       }
       catch (std::exception const& err)
       {
         XLOG_ERROR("failed to queue response for send. %s", err.what());
       }
+      if (response_envelope)
+        cJSON_Delete(response_envelope);
     }
 
     void registerRpcFunctions()
@@ -284,31 +345,48 @@ namespace
     }
 
   private:
-    std::shared_ptr<GattClient> m_client; 
-    std::mutex                  m_mutex;
+    std::shared_ptr<GattClient>   m_client; 
+    std::mutex                    m_mutex;
+    std::shared_ptr<std::thread>  m_dispatch_thread;
+    std::queue<cJSON *>           m_incoming_queue;
+    std::condition_variable       m_cond;
   };
 }
 
-// TODO: proper test framework
-static cJSON* Test_wifiConnect();
-static cJSON* Test_wifiStatus();
-static cJSON* Test_appSettingsGet();
-static cJSON* Test_appSettingsSet();
+void*
+run_test(void* argp)
+{
+  sleep(2);
+
+  RpcDispatcher* dispatcher = (RpcDispatcher *) argp;
+
+  cJSON* req = cJSON_CreateObject();
+  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
+  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
+  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(1234));
+  dispatcher->onIncomingMessage(req);
+
+  return NULL;
+}
+
+
 
 int main(int argc, char* argv[])
 {
   std::string configFile = "bleconfd.ini";
+  xLog::getLogger().setLevel(logLevel_Info);
 
   while (true)
   {
     static struct option longOptions[] = 
     {
       { "config", required_argument, 0, 'c' },
+      { "debug",  no_argument, 0, 'd' },
       { 0, 0, 0, 0 }
     };
 
     int optionIndex = 0;
-    int c = getopt_long(argc, argv, "c:", longOptions, &optionIndex);
+    int c = getopt_long(argc, argv, "c:d", longOptions, &optionIndex);
     if (c == -1)
       break;
 
@@ -317,12 +395,13 @@ int main(int argc, char* argv[])
       case 'c':
         configFile = optarg;
         break;
+      case 'd':
+        xLog::getLogger().setLevel(logLevel_Debug);
       default:
         break;
     }
   }
 
-  xLog::getLogger().setLevel(logLevel_Debug);
   appSettings_init(configFile.c_str());
   
   RpcDispatcher rpc_dispatcher;
@@ -337,6 +416,13 @@ int main(int argc, char* argv[])
     XLOG_ERROR("wpaControl_init failed, code = %d", wpa_init_ret);
     exit(1);
   }
+
+  std::string bleName(appSettings_get_ble_value("ble_name"));
+  startBeacon(bleName);
+
+  // TODO: add command line to run various tests
+//   pthread_t thread;
+//  pthread_create(&thread, nullptr, &run_test, &rpc_dispatcher);
 
   DIS_dumpProvider();
   while (true)
@@ -358,82 +444,6 @@ int main(int argc, char* argv[])
     }
   }
 
-#if 0
-  cJSON* req = Test_appSettingsGet();
-  cJSON* res = nullptr;
-
-  rpcServer_dispatch(req, &res);
-
-  // TODO: post response on BLE outbox
-  if (res)
-  {
-    char* s = cJSON_Print(res);
-    printf("%s\n", s);
-    free(s);
-    cJSON_Delete(res);
-  }
-  cJSON_Delete(req);
-#endif
-
-
   wpaControl_shutdown();
   return 0;
-}
-
-cJSON* Test_wifiConnect()
-{
-  cJSON* req = cJSON_CreateObject();
-  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(2));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-connect"));
-  cJSON_AddItemToObject(req, "wi-fi_tech", cJSON_CreateString("infra"));
-
-  cJSON* disco = cJSON_CreateObject();
-  cJSON_AddItemToObject(disco, "ssid", cJSON_CreateString("JAKE_5"));
-  cJSON_AddItemToObject(req, "discovery", disco);
-
-  cJSON* creds = cJSON_CreateObject();
-  cJSON_AddItemToObject(creds, "akm", cJSON_CreateString("psk"));
-  cJSON_AddItemToObject(creds, "pass", cJSON_CreateString("jake1234"));
-  cJSON_AddItemToObject(req, "cred", creds);
-
-  return req;
-}
-
-cJSON* Test_wifiStatus()
-{
-  cJSON* req = cJSON_CreateObject();
-  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(1234));
-
-  return req;
-}
-
-cJSON* Test_appSettingsGet()
-{
-  cJSON* req = cJSON_CreateObject();
-  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("app-settings-get"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(1));
-
-  cJSON* params = cJSON_CreateObject();
-  cJSON_AddItemToObject(params, "name", cJSON_CreateString("setting1"));
-  cJSON_AddItemToObject(req, "params", params);
-  return req;
-}
-
-cJSON* Test_appSettingsSet()
-{
-  cJSON* req = cJSON_CreateObject();
-  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("app-settings-set"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(2));
-
-  cJSON* params = cJSON_CreateObject();
-  cJSON_AddItemToObject(params, "name", cJSON_CreateString("setting1"));
-  cJSON_AddItemToObject(params, "value", cJSON_CreateNumber(2));
-  cJSON_AddItemToObject(params, "type", cJSON_CreateNumber(appSettingsKind_Int32));
-  cJSON_AddItemToObject(req, "params", params);
-  return req;
 }

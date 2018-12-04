@@ -57,25 +57,48 @@ wpaControl_init(char const* control_socket, ResponseSender const& sender)
 
   enqueue_async_message = sender;
 
-  std::string         wpa_socket_name = control_socket;
-  struct wpa_ctrl*    wpa_notify = nullptr;
+  std::string wpa_socket_name = control_socket;
+  struct wpa_ctrl* wpa_notify = nullptr;
 
-  pipe2(wpa_shutdown_pipe, O_CLOEXEC);
+  int ret = pipe2(wpa_shutdown_pipe, O_CLOEXEC);
+  if (ret == -1)
+  {
+    int err = errno;
+    XLOG_ERROR("failed to create shutdown pipe. %s", strerror(err));
+    return err;
+  }
 
   wpa_request = wpa_ctrl_open(wpa_socket_name.c_str());
   if (!wpa_request) 
-    return errno;
+  {
+    int err = errno;
+    XLOG_ERROR("failed to open:%s. %s", wpa_socket_name.c_str(), strerror(err));
+    return err;
+  }
+  else
+  {
+    XLOG_INFO("wpa request socket:%s opened for synchronous requests", wpa_socket_name.c_str());
+  }
+
 
   wpa_notify = wpa_ctrl_open(wpa_socket_name.c_str());
   if (!wpa_notify) 
   {
     int err = errno;
+    XLOG_ERROR("failed to open notify socket:%s. %s", wpa_socket_name.c_str(), strerror(err));
     if (wpa_request)
+    {
       wpa_ctrl_close(wpa_request);
+      wpa_request = nullptr;
+    }
     return err;
   }
-  wpa_ctrl_attach(wpa_notify);
+  else
+  {
+    XLOG_INFO("wpa request socket:%s opened for notification", wpa_socket_name.c_str());
+  }
 
+  wpa_ctrl_attach(wpa_notify);
   pthread_create(&wpa_notify_thread, nullptr, &wpa_notify_read, wpa_notify);
 
   return 0;
@@ -119,9 +142,9 @@ wpa_notify_read(void* argp)
 
         ret = wpa_ctrl_recv(wpa_notify, buff, &n);
         if (ret < 0) 
-          printf("error:%s\n", strerror(errno));
+          XLOG_ERROR("error reading from WPA socket:%s", strerror(errno));
         else 
-          printf("event:%.*s\n", n, buff);
+          XLOG_INFO("event:%.*s", n, buff);
       }
     }
   }
@@ -135,13 +158,23 @@ int
 wpaControl_command(char const* cmd, std::string& res)
 {
   res.reserve(4096);
-  res.resize(4096);
+  res.resize(4069);
 
   size_t n = res.capacity();
 
+  XLOG_INFO("wpa command:%s", cmd);
+  if (!wpa_request)
+  {
+    XLOG_ERROR("request handle is null");
+    return -EINVAL;
+  }
+
   int ret = wpa_ctrl_request(wpa_request, cmd, strlen(cmd), &res[0], &n, nullptr);
   if (ret < 0)
+  {
+    XLOG_WARN("failed to submit wpa control request:%d", ret);
     return errno;
+  }
 
   res.resize(n);
   return 0;
@@ -245,8 +278,12 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
 {
   bool running = true;
   int pre_req_id = connect_req_id;
+  uint32_t timeout_time = 1000 * 1000 * 15;  // 15 seconds
   XLOG_DEBUG("watch_wlan_state create new thread to check state, req_id= %d", pre_req_id);
   usleep(1000 * 1200); // wait some time then start check
+  uint32_t used_time = 1000 * 1200;
+  uint32_t loop_time = 1000 * 100; // 100 ms
+   
   // the state should be from "4WAY_HANDSHAKE" to something else
   while (true)
   {
@@ -258,11 +295,10 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
 
     std::string state = get_wlan_state();
 
-    if (!state.compare("SCANNING")
-        || !state.compare("DISCONNECTED")
+    if ( !state.compare("DISCONNECTED")
         || !state.compare("INACTIVE")
         || !state.compare("INTERFACE_DISABLED")
-        ) // connect failed
+        ) // connect failed, return directly
     {
       cJSON* rsp = wpaControl_createAsyncConnectResponse("connect failed, maybe password wrong or something else",
                                                          state);
@@ -278,8 +314,20 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
 
       enqueue_async_message(rsp);
       running = false;
+    } else // other states may between COMPLETED with 4WAY_HANDSHAKE, so we need ignore this
+    {
+      used_time += loop_time;
     }
-    usleep(1000 * 100);  // 200 ms check
+
+    // timeout
+    if (used_time >= timeout_time && running)
+    {
+      cJSON* rsp = wpaControl_createAsyncConnectResponse("connect failed, timeout",
+                                                         state);
+      enqueue_async_message(rsp);
+      running = false;
+    }
+    usleep(loop_time); 
   }
 }
 
@@ -315,9 +363,13 @@ wpaControl_getStatus(cJSON const* UNUSED_PARAM(req), cJSON** res)
 
   int ret = wpaControl_command("STATUS", buff);
   if (ret)
+  {
     *res = wpaControl_createError(ret);
+  }
   else
+  {
     *res = wpaControl_createResponse(buff);
+  }
 
   return 0;
 }
@@ -327,25 +379,28 @@ wpaControl_createResponse(std::string const& s)
 {
   cJSON* res = cJSON_CreateObject();
 
-  size_t begin = 0;
-  while (true)
+  if (!s.empty())
   {
-    size_t end = s.find('\n', begin);
-    if (end == std::string::npos)
-      break;
-
-    std::string line(s.substr(begin, (end - begin)));
-    size_t mid = line.find('=');
-
-    if (mid != std::string::npos)
+    size_t begin = 0;
+    while (true)
     {
-      std::string name(line.substr(0, mid));
-      std::string value(line.substr(mid + 1));
+      size_t end = s.find('\n', begin);
+      if (end == std::string::npos)
+        break;
 
-      cJSON_AddItemToObject(res, name.c_str(), cJSON_CreateString(value.c_str()));
+      std::string line(s.substr(begin, (end - begin)));
+      size_t mid = line.find('=');
+
+      if (mid != std::string::npos)
+      {
+        std::string name(line.substr(0, mid));
+        std::string value(line.substr(mid + 1));
+
+        cJSON_AddItemToObject(res, name.c_str(), cJSON_CreateString(value.c_str()));
+      }
+
+      begin = end + 1;
     }
-
-    begin = end + 1;
   }
 
   return res;
