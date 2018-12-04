@@ -30,6 +30,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <memory>
+#include <queue>
+#include <condition_variable>
 
 using std::string;
 using std::vector;
@@ -190,6 +193,8 @@ namespace
   public:
     RpcDispatcher()
     {
+      XLOG_INFO("creating dispatch thread");
+      m_dispatch_thread.reset(new std::thread([this] { this->processIncomingQueue(); }));
     }
 
     void setClient(std::shared_ptr<GattClient> const& clnt)
@@ -213,6 +218,7 @@ namespace
       stop();
     }
 
+    // for outgoing messages
     void enqueueAsyncMessage(cJSON* json)
     {
       if (!json)
@@ -226,16 +232,42 @@ namespace
       cJSON_Delete(json);
     }
 
+    // this is called by the gatt server after reading a complete command
+    // from the client. 
     void onIncomingMessage(cJSON* req)
     {
-      #if 0
-      char* s = cJSON_Print(req);
-      if (s)
+      XLOG_INFO("enqueue new incoming request");
+      std::lock_guard<std::mutex> guard(m_mutex);
+      m_incoming_queue.push(req);
+      m_cond.notify_all();
+    }
+
+    void processIncomingQueue()
+    {
+      while (true)
       {
-        XLOG_DEBUG("incoming request\n\t%s", s);
-        free(s);
+        cJSON* req = nullptr;
+        XLOG_INFO("processing incoming queue");
+
+        {
+          std::unique_lock<std::mutex> guard(m_mutex);
+          m_cond.wait(guard, [this] { return !this->m_incoming_queue.empty(); });
+
+          if (!m_incoming_queue.empty())
+          {
+            req = m_incoming_queue.front();
+            m_incoming_queue.pop();
+          }
+        }
+
+        if (req)
+          processRequest(req);
       }
-      #endif
+    }
+
+    void processRequest(cJSON* req)
+    {
+      XLOG_INFO("processing new incoming request");
       cJSON_Deleter req_deleter(req);
 
       cJSON* response_envelope = nullptr;
@@ -268,6 +300,8 @@ namespace
           XLOG_INFO("found %s and executing", method->valuestring);
 
           int ret = func(req, &rpc_response);
+
+          XLOG_INFO("%s returned:%d", method->valuestring, ret);
           if (ret)
           {
             // TODO:
@@ -311,8 +345,11 @@ namespace
     }
 
   private:
-    std::shared_ptr<GattClient> m_client; 
-    std::mutex                  m_mutex;
+    std::shared_ptr<GattClient>   m_client; 
+    std::mutex                    m_mutex;
+    std::shared_ptr<std::thread>  m_dispatch_thread;
+    std::queue<cJSON *>           m_incoming_queue;
+    std::condition_variable       m_cond;
   };
 }
 
@@ -337,17 +374,19 @@ run_test(void* argp)
 int main(int argc, char* argv[])
 {
   std::string configFile = "bleconfd.ini";
+  xLog::getLogger().setLevel(logLevel_Info);
 
   while (true)
   {
     static struct option longOptions[] = 
     {
       { "config", required_argument, 0, 'c' },
+      { "debug",  no_argument, 0, 'd' },
       { 0, 0, 0, 0 }
     };
 
     int optionIndex = 0;
-    int c = getopt_long(argc, argv, "c:", longOptions, &optionIndex);
+    int c = getopt_long(argc, argv, "c:d", longOptions, &optionIndex);
     if (c == -1)
       break;
 
@@ -356,12 +395,13 @@ int main(int argc, char* argv[])
       case 'c':
         configFile = optarg;
         break;
+      case 'd':
+        xLog::getLogger().setLevel(logLevel_Debug);
       default:
         break;
     }
   }
 
-  xLog::getLogger().setLevel(logLevel_Debug);
   appSettings_init(configFile.c_str());
   
   RpcDispatcher rpc_dispatcher;
@@ -378,8 +418,8 @@ int main(int argc, char* argv[])
   }
 
   // TODO: add command line to run various tests
-  // pthread_t thread;
-  // pthread_create(&thread, nullptr, &run_test, &rpc_dispatcher);
+//   pthread_t thread;
+//  pthread_create(&thread, nullptr, &run_test, &rpc_dispatcher);
 
   DIS_dumpProvider();
   while (true)

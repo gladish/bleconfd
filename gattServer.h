@@ -117,6 +117,7 @@ private:
   DeviceInfoProvider  m_dis_provider;
   gatt_db_attribute*  m_data_channel;
   gatt_db_attribute*  m_blepoll;
+  uint16_t            m_notify_handle;
   bool                m_service_change_enabled;
   int                 m_timeout_id;
   std::thread::id     m_mainloop_thread;
