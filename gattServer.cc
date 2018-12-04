@@ -409,14 +409,34 @@ GattClient::onDataChannelOut(
   XLOG_INFO("onDataChannelOut(id=%d, offset=%u, opcode=%d)",
     id, offset, opcode);
 
-  char buff[16]; // should match mtu
-  int n = m_outgoing_queue.get_line(buff, sizeof(buff));
+  static int32_t const kBufferSize = 1024;
+  static uint8_t buff[kBufferSize];
 
-  // TODO: how do we handle the offset?
+  int n = 0;
+
+  if (offset == 0)
+  {
+    bool end_of_record = false;
+
+    memset(buff, 0, sizeof(buff));
+    n = m_outgoing_queue.get_line((char *)buff, kBufferSize - 1, &end_of_record);
+    if (end_of_record)
+      buff[n] = kRecordDelimiter;
+  }
+  else
+  {
+    int bytesToWrite = 0;
+    while ((bytesToWrite < kBufferSize) && (buff[bytesToWrite] != kRecordDelimiter))
+      bytesToWrite++;
+    bytesToWrite += 1;
+
+    n = bytesToWrite - offset;
+    XLOG_INFO("bytesToWrite:%d offset:%d n:%d", bytesToWrite, offset, n);
+  }
 
   uint8_t const* value = nullptr;
   if (n > 0)
-    value = reinterpret_cast<uint8_t const *>(&buff[0]);
+    value = buff + offset;
   else
     buff[0] = '\0';
 
@@ -738,7 +758,7 @@ GattClient::enqueueForSend(cJSON const* json)
     return;
   }
 
-  char* s = cJSON_Print(json);
+  char* s = cJSON_PrintUnformatted(json);
   m_outgoing_queue.put_line(s);
   free(s);
 }

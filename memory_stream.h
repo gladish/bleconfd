@@ -15,12 +15,13 @@
 //
 #include <sstream>
 #include <mutex>
+#include <queue>
 #include <string.h>
 
 #ifndef __MEMORY_STREAM_H__
 #define __MEMORY_STREAM_H__
 
-#if 1
+#if 0
 class memory_stream
 {
 public:

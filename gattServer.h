@@ -16,13 +16,13 @@
 #ifndef __GATT_SERVER_H__
 #define __GATT_SERVER_H__
 
-#include "memory_stream.h"
-
 #include <list>
 #include <memory>
 #include <thread>
 #include <vector>
 #include <sstream>
+
+#include "memory_stream.h"
 
 extern "C" 
 {
