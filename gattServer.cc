@@ -16,6 +16,7 @@
 #include "defs.h"
 #include "gattServer.h"
 #include "xLog.h"
+#include "beacon.h"
 
 #include <exception>
 #include <sstream>
@@ -230,6 +231,8 @@ GattServer::init()
 std::shared_ptr<GattClient>
 GattServer::accept(GattClient::DeviceInfoProvider const& p)
 {
+  // clean all connection
+  reinitializeBLE();
   mainloop_init();
 
   sockaddr_l2 peer_addr;
@@ -451,7 +454,7 @@ GattClient::onEPollRead(
   uint8_t               opcode,
   bt_att*               UNUSED_PARAM(att))
 {
-  uint32_t value = 1234;
+  uint32_t value = m_outgoing_queue.size();
 
   XLOG_DEBUG("onEPollRead(offset=%d, opcode=%d)", offset, opcode);
 

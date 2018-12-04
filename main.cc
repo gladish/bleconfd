@@ -417,6 +417,9 @@ int main(int argc, char* argv[])
     exit(1);
   }
 
+  std::string bleName(appSettings_get_ble_value("ble_name"));
+  startBeacon(bleName);
+
   // TODO: add command line to run various tests
 //   pthread_t thread;
 //  pthread_create(&thread, nullptr, &run_test, &rpc_dispatcher);

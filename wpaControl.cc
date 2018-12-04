@@ -278,8 +278,12 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
 {
   bool running = true;
   int pre_req_id = connect_req_id;
+  uint32_t timeout_time = 1000 * 1000 * 15;  // 15 seconds
   XLOG_DEBUG("watch_wlan_state create new thread to check state, req_id= %d", pre_req_id);
   usleep(1000 * 1200); // wait some time then start check
+  uint32_t used_time = 1000 * 1200;
+  uint32_t loop_time = 1000 * 100; // 100 ms
+   
   // the state should be from "4WAY_HANDSHAKE" to something else
   while (true)
   {
@@ -291,11 +295,10 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
 
     std::string state = get_wlan_state();
 
-    if (!state.compare("SCANNING")
-        || !state.compare("DISCONNECTED")
+    if ( !state.compare("DISCONNECTED")
         || !state.compare("INACTIVE")
         || !state.compare("INTERFACE_DISABLED")
-        ) // connect failed
+        ) // connect failed, return directly
     {
       cJSON* rsp = wpaControl_createAsyncConnectResponse("connect failed, maybe password wrong or something else",
                                                          state);
@@ -311,8 +314,20 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
 
       enqueue_async_message(rsp);
       running = false;
+    } else // other states may between COMPLETED with 4WAY_HANDSHAKE, so we need ignore this
+    {
+      used_time += loop_time;
     }
-    usleep(1000 * 100);  // 200 ms check
+
+    // timeout
+    if (used_time >= timeout_time && running)
+    {
+      cJSON* rsp = wpaControl_createAsyncConnectResponse("connect failed, timeout",
+                                                         state);
+      enqueue_async_message(rsp);
+      running = false;
+    }
+    usleep(loop_time); 
   }
 }
 
