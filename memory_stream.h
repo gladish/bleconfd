@@ -20,6 +20,7 @@
 #ifndef __MEMORY_STREAM_H__
 #define __MEMORY_STREAM_H__
 
+#if 1
 class memory_stream
 {
 public:
@@ -70,5 +71,83 @@ private:
   mutable std::mutex  m_mutex;
   char                m_delimiter;
 };
+
+#else
+
+class memory_stream
+{
+public:
+  memory_stream(char delim)
+    : m_stream()
+    , m_mutex()
+    , m_delimiter(delim)
+  {
+  }
+
+
+  int get_line(char* s, int n, bool* end_of_record)
+  {
+    int bytes_read = 0;
+
+    if (end_of_record)
+      *end_of_record = false;
+
+    std::lock_guard<std::mutex> guard(m_mutex);
+    while (!read_complete(bytes_read, n))
+    {
+      s[bytes_read++] = m_stream.front();
+      m_stream.pop();
+    }
+
+    if (m_stream.front() == m_delimiter)
+    {
+      if (end_of_record)
+        *end_of_record = true;
+      m_stream.pop();
+    }
+
+    return bytes_read;
+  }
+
+  void put_line(char const* s)
+  {
+    if (!s)
+      return;
+
+    size_t n = strlen(s);
+
+    std::lock_guard<std::mutex> guard(m_mutex);
+    for (size_t i = 0; i < n; ++i)
+      m_stream.push(s[i]);
+    m_stream.push(m_delimiter);
+  }
+
+  int size() const
+  {
+    std::lock_guard<std::mutex> guard(m_mutex);
+    return m_stream.size();
+  }
+
+private:
+  bool read_complete(int bytes_read, int n)
+  {
+    if (m_stream.empty())
+      return true;
+
+    if (bytes_read == n)
+      return true;
+
+    if (m_stream.front() == m_delimiter)
+      return true;
+
+    return false;
+  }
+
+private:
+  std::queue<char>    m_stream;
+  mutable std::mutex  m_mutex;
+  char                m_delimiter;
+};
+#endif
 
 #endif
