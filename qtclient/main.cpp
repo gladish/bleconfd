@@ -10,6 +10,7 @@
 #include <QJsonObject>
 
 #include <iostream>
+#include <sstream>
 
 #include "bluetoothapplication.h"
 

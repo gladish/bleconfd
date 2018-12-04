@@ -14,6 +14,7 @@
 #include <QTimer>
 
 #include <iostream>
+#include <arpa/inet.h>
 
 #define BT_UUID(NAME, UUID) static QBluetoothUuid const NAME = QBluetoothUuid(QString(UUID))
 
@@ -61,59 +62,6 @@ static QString propertiesToString(QLowEnergyCharacteristic::PropertyTypes props)
   return "[" + list.join(',') + "]";
 }
 
-#if 0
-static QMap<QBluetoothUuid, QString> kRDKCharacteristicUUIDs = 
-{
-  { kRdkProvisionStateCharacteristic, "Provision State"},
-  { kRdkPublicKeyCharacteristic, "Public Key"},
-  { kRdkWiFiConfigCharacteristic, "WiFi Config"},
-
-  { QBluetoothUuid(QString("12984c43-3b43-4952-a387-715dcf9795c6")), "DeviceId"},
-  { QBluetoothUuid(QString("16abb396-ab2c-4928-973d-e28a406d042b")), "Lost And Found Access Token"}
-};
-#endif
-
-static uint16_t
-ST(uint16_t n)
-{
-  return n;
-}
-
-static QMap< uint16_t, QString > kRdkStatusStrings = 
-{
-  { ST(0x0101), "Awaiting WiFi Configuration" },
-  { ST(0x0102), "Processing WiFi Configuration" },
-  { ST(0x0103), "Connecting to WiFi" },
-  { ST(0x0104), "Successfully conected to WiFi" },
-  { ST(0x0105), "Acquiring IP Address" },
-  { ST(0x0106), "IP address acquired" },
-  { ST(0x09ff), "Setup complete" },
-  
-  { ST(0x0a01), "Unknown Error" },
-  { ST(0x0a02), "Error decrytingA WiFi configuration" },
-  { ST(0x0a03), "Malformed WiFi configuration" },
-  { ST(0x0a04), "Acquire IP timeout" }
-};
-
-QString
-statusToString(QByteArray const& arr)
-{
-  uint16_t n = arr[1];
-  n <<= 8;
-  n |= arr[0];
-
-  QString s;
-  QMap< uint16_t, QString >::const_iterator i = kRdkStatusStrings.find(n);
-  if (i != kRdkStatusStrings.end())
-  {
-    s = QString("(%1) %2").arg(QString::asprintf("0x%04x",n)).arg(i.value());
-  }
-  else
-    s = QString::number(n);
-
-  return s;
-}
-
 static QString charName(QLowEnergyCharacteristic const& c)
 {
   QString name = c.name();
@@ -123,7 +71,7 @@ static QString charName(QLowEnergyCharacteristic const& c)
 }
 
 static QString
-byteArrayToString(QBluetoothUuid const& uuid, QByteArray const& a)
+byteArrayToString(QByteArray const& a)
 {
   QString s;
 
@@ -150,7 +98,6 @@ BluetoothApplication::BluetoothApplication(QBluetoothAddress const& adapter)
   : m_disco_agent(nullptr)
   , m_adapter(adapter)
   , m_controller(nullptr)
-  , m_do_full_provision(false)
 {
   log("local adapter is null:%d", m_adapter.isNull());
   foreach (QBluetoothHostInfo info, QBluetoothLocalDevice::allDevices())
@@ -270,13 +217,12 @@ BluetoothApplication::introspectNextService()
     // connect notification
     connect(m_rpc_service, &QLowEnergyService::characteristicChanged,
       this, &BluetoothApplication::onCharacteristicChanged);
-
-    QLowEnergyDescriptor notification = m_rpc_epoll.descriptor(
-      QBluetoothUuid::ClientCharacteristicConfiguration);
-    m_rpc_service->writeDescriptor(notification, QByteArray::fromHex("0100"));
+    connect(m_rpc_service, &QLowEnergyService::characteristicRead,
+      this, &BluetoothApplication::onReadInbox);
 
     if (m_rpc_service)
     {
+      // XXX: TESTING
       m_json_request.append(30);
       m_rpc_service->writeCharacteristic(m_rpc_inbox, m_json_request,
         QLowEnergyService::WriteWithResponse);
@@ -320,6 +266,43 @@ BluetoothApplication::readNextCharacteristic()
 }
 
 void
+BluetoothApplication::onReadInbox(QLowEnergyCharacteristic const& c, QByteArray const& value)
+{
+  log("onReadInbox:%d", (int) value.size());
+  if (c.uuid() != kRdkRpcInboxChar)
+    return;
+
+  for (char ch : value)
+  {
+    if (ch == (char) 30)
+    {
+      QJsonParseError parseError;
+      QJsonDocument doc = QJsonDocument::fromJson(m_incoming_data, &parseError);
+
+      if (parseError.error != QJsonParseError::NoError)
+      {
+        log("failed to parse json:%s", qPrintable(parseError.errorString()));
+      }
+      else
+      {
+        log(
+          "\n"
+          "\t-------------- RESPONSE ----------------\n"
+          "\t%s\n"
+          "\t-------------- RESPONSE ----------------\n"
+          "\n", qPrintable(QString(doc.toJson())));
+      }
+
+      m_incoming_data.clear();
+    }
+    else
+    {
+      m_incoming_data.append(ch);
+    }
+  }
+}
+
+void
 BluetoothApplication::onServiceStateChanged(QLowEnergyService::ServiceState newState)
 {
   if (newState != QLowEnergyService::ServiceDiscovered)
@@ -338,17 +321,28 @@ BluetoothApplication::onServiceStateChanged(QLowEnergyService::ServiceState newS
     QString name = charName(c);
     log("\tcharacteristic uuid:%s name:%s", qPrintable(c.uuid().toString()), qPrintable(name));
     log("\t\tprops:%s", qPrintable(propertiesToString(c.properties())));
-    log("\t\tvalue:%s", qPrintable(byteArrayToString(c.uuid(), value)));
+    log("\t\tvalue:%s", qPrintable(byteArrayToString(value)));
 
     if (c.uuid() == kRdkRpcInboxChar)
     {
-      log("found inbox characterisitc");
       m_rpc_inbox = c;
     }
     else if (c.uuid() == kRdkRpcEPollChar)
     {
-      log("found epoll characterisitc");
       m_rpc_epoll = c;
+
+      QLowEnergyDescriptor notification = c.descriptor(
+          QBluetoothUuid::ClientCharacteristicConfiguration);
+
+      if (!notification.isValid())
+      {
+        log("notification isn't valid");
+      }
+      else
+      {
+        m_rpc_service->writeDescriptor(notification, QByteArray::fromHex("0100"));
+        log("enabled notification on rpc epoll characateristic");
+      }
     }
 
     readNextCharacteristic();
@@ -382,7 +376,19 @@ BluetoothApplication::onCharacteristicChanged(QLowEnergyCharacteristic const& c,
   log("characterisitic CHANGED uuid:%s name:%s", qPrintable(c.uuid().toString()),
     qPrintable(name));
   log("\tprops:%s", qPrintable(propertiesToString(c.properties())));
-  log("\tvalue:%s", qPrintable(byteArrayToString(c.uuid(), value)));
+  log("\tvalue:%s", qPrintable(byteArrayToString(value)));
+
+  uint32_t n = {0};
+  memcpy(&n, value.data(), 4);
+  n = ntohl(n);
+
+  log("\tbytes:%u", n);
+
+  // TODO: initiate read from inbox
+  QTimer::singleShot(1, [this] 
+  {
+    m_rpc_service->readCharacteristic(m_rpc_inbox);
+  });
 }
 
 void

@@ -11,6 +11,7 @@
 #include <QtBluetooth/QBluetoothDeviceInfo>
 #include <QtBluetooth/QBluetoothDeviceDiscoveryAgent>
 #include <QtBluetooth/QLowEnergyController>
+#include <QtBluetooth/QLowEnergyCharacteristic>
 
 #ifdef __GNUC__
 #define PRINTF_FORMAT(IDX, FIRST) __attribute__((format(printf, IDX, FIRST)))
@@ -43,6 +44,7 @@ private slots:
   void onDiscoveryFinished();
   void onCharacteristicChanged(QLowEnergyCharacteristic const& c, QByteArray const& newValue);
   void onServiceStateChanged(QLowEnergyService::ServiceState newState);
+  void onReadInbox(QLowEnergyCharacteristic const& c, QByteArray const& value);
 
 private:
   QBluetoothDeviceDiscoveryAgent* m_disco_agent;
@@ -71,8 +73,7 @@ private:
   void printTimes();
 
   QMap< QString, TimeSpan >       m_times;
-  bool                            m_do_full_provision;
-  QString                         m_xbo_device_id;
+  QByteArray                      m_incoming_data;
 };
 
 #endif
