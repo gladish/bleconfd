@@ -11,37 +11,64 @@ Messages will be small and split into frames.  The server will have an "inbox" w
 
 The initial target for the server is a Raspberry Pi running Raspbian.  We want to target the rPi 3 because it has BLE built in.  We will be using BlueZ for the main Bluetooth functionality, including the GATT server.
 
-* GLib  2.38.2
 * BlueZ 5.45
 
-### BUILD
+## Build instructions
 
-1. Set these three
-```
-export HOSTAPD_HOME=/home/pi/work/hostap
-export BLUEZ_HOME=/home/pi/work/bluez-5.47
-export CJSON_HOME=/home/pi/work/cJSON
-```
+##### DOWNLOAD AND BUILD LIBS
 
-2. `make`
+- update system and install needed libs 
+
+  ```
+  sudo apt-get update
+  sudo apt install libglib2.0-dev libdbus-1-dev libudev-dev libical-dev libreadline-dev
+  ```
+
+- download and build bluez-5.47
+
+  ```
+  wget http://www.kernel.org/pub/linux/bluetooth/bluez-5.47.tar.xz
+  tar -xvf bluez-5.47.tar.xz
+  cd bluez-5.47
+  ./configure
+  make -j4
+  cd ..
+  ```
+
+- download and build cJSON
+
+  ```
+  git clone https://github.com/DaveGamble/cJSON.git
+  cd cJSON
+  make
+  ```
+  then use `sudo vi /etc/ld.so.conf` open ld conf file, add `/home/pi/work/cJSON` to last line, and save it.
+
+  then use `sudo ldconfig /etc/ld.so.conf` to make it effective
+
+- download hostap(wpa_supplicant-2.6), don't need build it
+
+  ```
+  cd ~/work
+  wget https://w1.fi/releases/wpa_supplicant-2.6.tar.gz
+  tar -xvf wpa_supplicant-2.6.tar.gz
+  ```
+
+##### BUILD bleconfd
+
+- copy bleconfd folder to  `/home/pi/work`, then goto this folder `cd /home/pi/work/bleconfd `
+- use `source env.sh` export all libs path.
+- then just run `make`
 
 
-### Demos
 
-These are a couple simple demos we hope to build out in the short term:
+### Run bleconfd and connect
 
-#### Demo 1
+must be step by step, otherwise it maybe cannot worked as expected.
 
-The initial demo will just be a simple service for getting and setting key value pairs via Glib.  We will build:
+1. run `sudo ./bleconfd`  to startup server on RPI device.
+2. run `sudo hciconfig hci0 piscan ` or click top left bluetooth icon then click "Make discoverable" to make the BLE device discoverable on RPI device.
+3. use android 8.0 + phone paired "RPI-BLE*" (you can change the name in bleconfd.ini), you maybe need confirm pair request on RPI device.  **in the first time, the BLE name maybe not this, please wait some times or refresh devices.**
+4. install *app-debug.apk* and open it or use source code *bleconfd-example* run app on android phone.
+5. select "RPI-BLE*", then click "CONNECT" button
 
-* A simple service on the server that can accept messages to get / set values based on a give key
- * The set values will write to an ini file via Glib
-* A simple mobile app that we can connect to the server via bluetooth to view and set the individual key values
-
-#### Demo 2
-
-The next demo, after demo 1 is complete, will involve setting wifi settings on the Raspberry Pi through the mobile app.  We will be able to enter a mobile network name and an WPA2 password on the mobile app, and this data will be sent over Bluetooth to the Raspberry Pi.  The Raspberry Pi will accept the message, configure it's wifi settings accordingly, and will connect to the given mobile network.
-
-### Complete version
-
-The complete app will eventually have mobile and command line test clients for many different data requests.  We will also build wiki style documentation for request, response, and the notification pieces of the JSON RPC protocol.
