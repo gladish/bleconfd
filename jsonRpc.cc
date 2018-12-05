@@ -110,25 +110,33 @@ jsonRpc_insertFunction(char const* name, jsonRpcFunction func)
 }
 
 int
-jsonRpc_getInt(cJSON* argv, int idx)
+jsonRpc_getInt(cJSON const* argv, int idx)
 {
   return jsonRpc_getn(argv, idx)->valueint;
 }
 
-char const*
-jsonRpc_getString(cJSON const* req, char const* name, bool required, char const* parent)
+int
+jsonRpc_getInt(cJSON const* req, char const* name, bool required)
 {
-  char* s = NULL;
-
-  cJSON* params = cJSON_GetObjectItem(req, parent);
-  if (!params && required)
+  cJSON* item = cJSON_GetObjectItem(req, name);
+  if (!item && required)
   {
     std::stringstream buff;
-    buff << "missing '" << parent << "' structure in request";
+    buff << "missing argument ";
+    buff << name;
+    buff << " from argv list";
     throw std::runtime_error(buff.str());
   }
 
-  cJSON* item = cJSON_GetObjectItem(params, name);
+  return item->valueint;
+}
+
+char const*
+jsonRpc_getString(cJSON const* req, char const* name, bool required)
+{
+  char* s = NULL;
+
+  cJSON* item = cJSON_GetObjectItem(req, name);
 
   if (!item && required)
   {
@@ -169,7 +177,7 @@ jsonRpc_getBool(cJSON* argv, int idx)
 }
 
 cJSON *
-jsonRpc_getn(cJSON* argv, int idx)
+jsonRpc_getn(cJSON const* argv, int idx)
 {
   int const n = cJSON_GetArraySize(argv);
   if (n <= idx)

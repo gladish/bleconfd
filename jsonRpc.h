@@ -56,12 +56,13 @@ bool jsonRpc_insertFunction(char const* name, jsonRpcFunction func);
 /**
  *
  */
-int jsonRpc_getInt(cJSON* argv, int idx);
+int jsonRpc_getInt(cJSON const* argv, int idx);
+int jsonRpc_getInt(cJSON const* argv, char const* name, bool required);
 
 /**
  *
  */
-char const* jsonRpc_getString(cJSON const* req, char const* name, bool required = false, char const* parent = "params");
+char const* jsonRpc_getString(cJSON const* req, char const* name, bool required);
 
 /**
  *
@@ -71,7 +72,7 @@ bool jsonRpc_getBool(cJSON* argv, int idx);
 /**
  *
  */
-cJSON* jsonRpc_getn(cJSON* argv, int idx);
+cJSON* jsonRpc_getn(cJSON const* argv, int idx);
 
 /**
  *

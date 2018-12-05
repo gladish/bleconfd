@@ -451,7 +451,7 @@ GattClient::onEPollRead(
   uint8_t               opcode,
   bt_att*               UNUSED_PARAM(att))
 {
-  uint32_t value = 1234;
+  uint32_t value = m_outgoing_queue.size();
 
   XLOG_DEBUG("onEPollRead(offset=%d, opcode=%d)", offset, opcode);
 

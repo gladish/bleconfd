@@ -84,7 +84,7 @@ appSettings_set(cJSON const* req, cJSON** res)
     // TODO
   }
 
-  char const* group = jsonRpc_getString(req, "group");
+  char const* group = jsonRpc_getString(req, "group", false);
   if (!group)
     group = kDefaultGroup;
 

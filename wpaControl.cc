@@ -80,7 +80,6 @@ wpaControl_init(char const* control_socket, ResponseSender const& sender)
     XLOG_INFO("wpa request socket:%s opened for synchronous requests", wpa_socket_name.c_str());
   }
 
-
   wpa_notify = wpa_ctrl_open(wpa_socket_name.c_str());
   if (!wpa_notify) 
   {
@@ -191,29 +190,36 @@ wpaControl_shutdown()
   return 0;
 }
 
-int
-wpaControl_create_network(int& network_idx)
+static int
+wpaControl_create_network(int* networkId)
 {
-  std::string buff;
-  int ret = wpaControl_command("ADD_NETWORK", buff);
+  std::string res;
+
+  if (!networkId)
+    return EINVAL;
+
+  int ret = wpaControl_command("ADD_NETWORK", res);
   if (ret < 0)
   {
-    XLOG_ERROR("wpaControl_create_network failed");
-    return errno;
+    int err = errno;
+    XLOG_ERROR("ADD_NETWORK failed:%s", strerror(err));
+    return err;
   }
-  std::stringstream ss(buff);
-  ss >> network_idx;
+
+  *networkId = static_cast<int>(strtol(res.c_str(), NULL, 10));
+
   return 0;
 }
 
-int
-wpaControl_connect_WPA2(int const& network_idx, char const* ssid, char const* wpa_pass)
+static int
+wpaControl_connect_WPA2(int networkId, char const* ssid, char const* wpa_pass)
 {
   std::string buff;
+
   int ret;
   char command_buff[512];
 
-  sprintf(command_buff, "SET_NETWORK %d ssid \"%s\"", network_idx, ssid);
+  sprintf(command_buff, "SET_NETWORK %d ssid \"%s\"", networkId, ssid);
   ret = wpaControl_command(command_buff, buff);
   if (ret < 0)
   {
@@ -221,7 +227,7 @@ wpaControl_connect_WPA2(int const& network_idx, char const* ssid, char const* wp
     return errno;
   }
 
-  sprintf(command_buff, "SET_NETWORK %d psk \"%s\"", network_idx, wpa_pass);
+  sprintf(command_buff, "SET_NETWORK %d psk \"%s\"", networkId, wpa_pass);
   ret = wpaControl_command(command_buff, buff);
   if (ret < 0)
   {
@@ -229,9 +235,9 @@ wpaControl_connect_WPA2(int const& network_idx, char const* ssid, char const* wp
     return errno;
   }
 
-  XLOG_DEBUG("SET_NETWORK successful %d", network_idx);
+  XLOG_DEBUG("SET_NETWORK successful %d", networkId);
 
-  sprintf(command_buff, "SELECT_NETWORK %d", network_idx);
+  sprintf(command_buff, "SELECT_NETWORK %d", networkId);
   ret = wpaControl_command(command_buff, buff);
   if (ret < 0)
   {
@@ -239,7 +245,9 @@ wpaControl_connect_WPA2(int const& network_idx, char const* ssid, char const* wp
     return errno;
   }
 
-  XLOG_DEBUG("SELECT_NETWORK successful %d", network_idx);
+  wpaControl_command("SAVE_CONFIG", buff);
+
+  XLOG_DEBUG("SELECT_NETWORK successful %d", networkId);
   return 0;
 }
 
@@ -319,20 +327,52 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
 int
 wpaControl_connectToNetwork(cJSON const* req, cJSON** res)
 {
+  char* s = cJSON_Print(req);
+  XLOG_INFO("connect:%s", s);
+  free(s);
 
+  cJSON const* params = cJSON_GetObjectItem(req, "params");
+  if (!params)
+  {
+    XLOG_WARN("missing params");
+    return -1;
+  }
 
-  char const* ssid = jsonRpc_getString(req, "ssid", true, "discovery");
-  char const* password = jsonRpc_getString(req, "pass", true, "cred");
-  connect_req_id = cJSON_GetObjectItem(req, "id")->valueint;
+  cJSON* creds = cJSON_GetObjectItem(params, "cred");
+  if (!creds)
+  {
+    XLOG_WARN("params is missing 'creds' object");
+    return -1;
+  }
 
-  XLOG_DEBUG("invoke wpaControl_connectToNetwork ssid=%s pwd=%s req_id=%d", ssid, password, connect_req_id);
-  int new_network_idx = 0;
-  wpaControl_create_network(new_network_idx);
-  XLOG_INFO("new network created, index = %d", new_network_idx);
-  wpaControl_connect_WPA2(new_network_idx, ssid, password);
+  cJSON* disco = cJSON_GetObjectItem(params, "discovery");
+  if (!disco)
+  {
+    XLOG_WARN("params is missing 'discovery' object");
+    return -1;
+  }
 
-  static pthread_t watch_state_t;
-  pthread_create(&watch_state_t, nullptr, &watch_wlan_state, nullptr);
+  char const* pass = jsonRpc_getString(creds, "pass", true);
+  char const* ssid = jsonRpc_getString(disco, "ssid", true);
+  int reqId = jsonRpc_getInt(req, "id", true);
+
+  XLOG_INFO("%s(ssid=%s pwd=%s reqId=%d)", __FUNCTION__, ssid, pass, reqId);
+
+  int networkId = -1;
+  int ret = wpaControl_create_network(&networkId);
+  if (ret)
+  {
+    int err = errno;
+    XLOG_WARN("failed to create network:%s", strerror(err));
+    return err;
+  }
+
+  XLOG_INFO("new network created, index = %d", networkId);
+
+  wpaControl_connect_WPA2(networkId, ssid, pass);
+
+//   pthread_t watch_state_t;
+//   pthread_create(&watch_state_t, nullptr, &watch_wlan_state, nullptr);
 
   // here don't return any result
   // connect response will return async
