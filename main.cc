@@ -273,7 +273,8 @@ namespace
       cJSON* response_envelope = nullptr;
 
       response_envelope = cJSON_CreateObject();
-      cJSON_AddItemToObject(response_envelope, "jsonrpc", cJSON_CreateString(JSON_RPC_VERSION));
+      cJSON_AddItemToObject(response_envelope, "jsonrpc",
+        cJSON_CreateString(kJsonRpcVersion));
 
       cJSON* method = cJSON_GetObjectItem(req, "method");
       if (!method)

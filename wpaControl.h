@@ -26,7 +26,7 @@ public:
   ~WpaClient();
 };
 
-int wpaControl_init(char const* control_socket, ResponseSender const& sender);
+int wpaControl_init(char const* control_socket, jsonRpcResponseCallback handler);
 int wpaControl_shutdown();
 
 // rpc functions

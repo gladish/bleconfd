@@ -37,25 +37,32 @@
 #include <cJSON.h>
 
 static struct wpa_ctrl* wpa_request = nullptr;
-static void* wpa_notify_read(void* argp);
 static int wpa_shutdown_pipe[2];
 static pthread_t wpa_notify_thread;
 
 static cJSON* wpaControl_createResponse(std::string const& s);
 static cJSON* wpaControl_createError(int err);
-static ResponseSender enqueue_async_message = nullptr;
+static void*  wpaControl_readNotificationSocket(void* argp);
+static void   wpaControl_reportEvent(char const* buff, int n);
+static jsonRpcResponseCallback responseHandler = NULL;
 static int connect_req_id = 0;
 
 int
-wpaControl_init(char const* control_socket, ResponseSender const& sender)
+wpaControl_init(char const* control_socket, jsonRpcResponseCallback handler)
 {
   if (!control_socket)
+  {
+    XLOG_WARN("NULL control socket path");
     return EINVAL;
+  }
 
-  if (!sender)
+  if (!handler)
+  {
+    XLOG_WARN("NULL response callback handler");
     return EINVAL;
+  }
 
-  enqueue_async_message = sender;
+  responseHandler = handler;
 
   std::string wpa_socket_name = control_socket;
   struct wpa_ctrl* wpa_notify = nullptr;
@@ -80,7 +87,7 @@ wpaControl_init(char const* control_socket, ResponseSender const& sender)
     XLOG_INFO("wpa request socket:%s opened for synchronous requests", wpa_socket_name.c_str());
   }
 
-  wpa_notify = wpa_ctrl_open(wpa_socket_name.c_str());
+  wpa_notify = wpa_ctrl_open2(wpa_socket_name.c_str(), "/tmp");
   if (!wpa_notify) 
   {
     int err = errno;
@@ -97,14 +104,41 @@ wpaControl_init(char const* control_socket, ResponseSender const& sender)
     XLOG_INFO("wpa request socket:%s opened for notification", wpa_socket_name.c_str());
   }
 
-  wpa_ctrl_attach(wpa_notify);
-  pthread_create(&wpa_notify_thread, nullptr, &wpa_notify_read, wpa_notify);
+  ret = wpa_ctrl_attach(wpa_notify);
+  if (ret != 0)
+  {
+    int err = errno;
+    XLOG_WARN("failed to attach to wpa interface for notification. %s", strerror(err));
+  }
 
+  pthread_create(&wpa_notify_thread, nullptr, &wpaControl_readNotificationSocket, wpa_notify);
   return 0;
 }
 
+void
+wpaControl_reportEvent(char const* buff, int n)
+{
+  if (!buff || !n)
+    return;
+
+  XLOG_INFO("event:%.*s", n, buff);
+
+  char* s = (char *) malloc(n + 1);
+  strncpy(s, buff, n);
+  s[n] = '\0';
+
+  cJSON* e = cJSON_CreateObject();
+  cJSON_AddItemToObject(e, "jsonrpc", cJSON_CreateString(kJsonRpcVersion));
+  cJSON_AddItemToObject(e, "method", cJSON_CreateString("wpa_event"));
+  cJSON_AddItemToObject(e, "params", cJSON_CreateString(s));
+
+  free(s);
+
+  responseHandler(e);
+}
+
 void*
-wpa_notify_read(void* argp)
+wpaControl_readNotificationSocket(void* argp)
 {
   struct wpa_ctrl* wpa_notify = reinterpret_cast<struct wpa_ctrl *>(argp);
 
@@ -127,7 +161,7 @@ wpa_notify_read(void* argp)
     FD_SET(shutdown_fd, &readfds);
     FD_SET(wpa_fd, &errfds);
 
-    int ret = select(maxfd, &readfds, nullptr, &errfds, nullptr);
+    int ret = select(maxfd + 1, &readfds, nullptr, &errfds, nullptr);
     if (ret > 0)
     {
       if (FD_ISSET(shutdown_fd, &readfds))
@@ -142,8 +176,8 @@ wpa_notify_read(void* argp)
         ret = wpa_ctrl_recv(wpa_notify, buff, &n);
         if (ret < 0) 
           XLOG_ERROR("error reading from WPA socket:%s", strerror(errno));
-        else 
-          XLOG_INFO("event:%.*s", n, buff);
+        else
+          wpaControl_reportEvent(buff, n);
       }
     }
   }
@@ -171,8 +205,9 @@ wpaControl_command(char const* cmd, std::string& res)
   int ret = wpa_ctrl_request(wpa_request, cmd, strlen(cmd), &res[0], &n, nullptr);
   if (ret < 0)
   {
-    XLOG_WARN("failed to submit wpa control request:%d", ret);
-    return errno;
+    int err = errno;
+    XLOG_WARN("failed to submit wpa control request:%s", strerror(err));
+    return err;
   }
 
   res.resize(n);
@@ -199,7 +234,7 @@ wpaControl_create_network(int* networkId)
     return EINVAL;
 
   int ret = wpaControl_command("ADD_NETWORK", res);
-  if (ret < 0)
+  if (ret != 0)
   {
     int err = errno;
     XLOG_ERROR("ADD_NETWORK failed:%s", strerror(err));
@@ -273,7 +308,7 @@ wpaControl_createAsyncConnectResponse(std::string const& message, std::string co
 {
   cJSON* response = cJSON_CreateObject();
   cJSON* temp = cJSON_CreateObject();
-  cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString(JSON_RPC_VERSION));
+  cJSON_AddItemToObject(temp, "jsonrpc", cJSON_CreateString(kJsonRpcVersion));
   cJSON_AddItemToObject(temp, "id", cJSON_CreateNumber(connect_req_id));
   cJSON_AddItemToObject(response, "result", temp);
   cJSON_AddItemToObject(response, "state", cJSON_CreateString(state.c_str()));
@@ -307,7 +342,7 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
     {
       cJSON* rsp = wpaControl_createAsyncConnectResponse("connect failed, maybe password wrong or something else",
                                                          state);
-      enqueue_async_message(rsp);
+      responseHandler(rsp);
       running = false;
     } else if (!state.compare("COMPLETED"))
     {
@@ -317,7 +352,7 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
       wpaControl_command("STATUS", statusBuffer);
       cJSON_AddItemToObject(rsp, "wlanStatus", wpaControl_createResponse(statusBuffer));
 
-      enqueue_async_message(rsp);
+      responseHandler(rsp);
       running = false;
     }
     usleep(1000 * 100);  // 200 ms check
@@ -370,12 +405,6 @@ wpaControl_connectToNetwork(cJSON const* req, cJSON** res)
   XLOG_INFO("new network created, index = %d", networkId);
 
   wpaControl_connect_WPA2(networkId, ssid, pass);
-
-//   pthread_t watch_state_t;
-//   pthread_create(&watch_state_t, nullptr, &watch_wlan_state, nullptr);
-
-  // here don't return any result
-  // connect response will return async
 
   *res = nullptr;
   return 0;

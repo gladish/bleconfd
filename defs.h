@@ -21,8 +21,9 @@
 
 #define UNUSED_PARAM(X) UNUSED_ ## X __attribute__((__unused__))
 #define BLECONFD_VERSION "1.0"
-#define JSON_RPC_VERSION "2.0"
 
-using ResponseSender = std::function< void (cJSON* res) >;
+#define kJsonRpcVersion "2.0"
+
+using jsonRpcResponseCallback = std::function< void (cJSON* res) >;
 
 #endif
