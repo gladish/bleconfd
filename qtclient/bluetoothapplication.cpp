@@ -288,10 +288,13 @@ BluetoothApplication::onReadInbox(QLowEnergyCharacteristic const& c, QByteArray 
         log(
           "\n"
           "\t-------------- RESPONSE ----------------\n"
-          "\t%s\n"
+          "\t%s"
           "\t-------------- RESPONSE ----------------\n"
           "\n", qPrintable(QString(doc.toJson())));
       }
+
+      // XXX:
+      // quit();
 
       m_incoming_data.clear();
     }
