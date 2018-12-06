@@ -107,26 +107,8 @@ int jsonRpc_makeResultValue(cJSON** result, int code, char const* fmt, ...)
 
 int jsonRpc_notImplemented(cJSON** result);
 
-#if 0
-class jsonRpcStringBuffer
-{
-public:
-  jsonRpcStringBuffer();
-  ~jsonRpcStringBuffer();
-
-  operator char* () const
-  {
-    return m_buff;
-  }
-
-private:
-  char* m_buff;
-};
-#endif
-
 
 int jsonRpc_result(int n, cJSON** result);
-// int jsonRpc_resultString(int n, jsonRpcStringBuffer& buff, cJSON** result);
 int jsonRpc_resultBool(int n, unsigned char& b, cJSON** result);
 int jsonRpc_resultInt(int ret, int& n, cJSON** result);
 int jsonRpc_resultUnsignedInt(int ret, unsigned int& n, cJSON** result);
