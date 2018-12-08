@@ -16,21 +16,19 @@
 #ifndef __WPA_CONTROL_H__
 #define __WPA_CONTROL_H__
 
-#include <string>
 #include "defs.h"
+#include "rpcserver.h"
 
-class WpaClient
+class WiFiService : public RpcService
 {
 public:
-  WpaClient(std::string const& control_socket);
-  ~WpaClient();
+  WiFiService();
+  virtual ~WiFiService();
+  virtual void init(std::string const& configFile,
+    RpcNotificationFunction const& callback) override;
+  virtual std::string name() const override;
+  virtual std::vector<std::string> methodNames() const override;
+  virtual RpcMethod method(std::string const& name) const override;
 };
-
-int wpaControl_init(char const* control_socket, jsonRpcResponseCallback handler);
-int wpaControl_shutdown();
-
-// rpc functions
-int wpaControl_connectToNetwork(cJSON const* req, cJSON** res);
-int wpaControl_getStatus(cJSON const* req, cJSON** res);
 
 #endif

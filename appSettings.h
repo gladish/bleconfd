@@ -16,20 +16,25 @@
 #ifndef __APP_SETTINGS_H__
 #define __APP_SETTINGS_H__
 
-#include <cJSON.h>
+#include "defs.h"
+#include "rpcserver.h"
 
-enum appSettings_Kind
+class AppSettingsService : public RpcService
 {
-  appSettingsKind_Boolean = 1,
-  appSettingsKind_Int32   = 2,
-  appSettingsKind_Int64   = 3,
-  appSettingsKind_UInt64  = 4,
-  appSettingsKind_Double  = 5
+public:
+  AppSettingsService();
+  virtual ~AppSettingsService();
+
+public:
+  virtual void init(std::string const& configFile,
+    RpcNotificationFunction const& callback) override;
+  virtual std::string name() const override;
+  virtual std::vector<std::string> methodNames() const override;
+  virtual RpcMethod method(std::string const& name) const override;
 };
 
-int appSettings_init(char const* settings_file);
-int appSettings_set(cJSON const* req, cJSON** res);
-int appSettings_get(cJSON const* req, cJSON** res);
+// TODO: I don't like exposing this, but we use these as a service and for
+// configuring the application
 
 /**
  * get ble values

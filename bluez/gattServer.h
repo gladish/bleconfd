@@ -22,7 +22,8 @@
 #include <vector>
 #include <sstream>
 
-#include "memory_stream.h"
+#include "../memory_stream.h"
+#include "../rpcserver.h"
 
 extern "C" 
 {
@@ -38,31 +39,17 @@ extern "C"
 
 struct gatt_db_attribute;
 
-class GattClient
+class GattClient : public RpcConnectedClient
 {
 public:
   GattClient(int fd);
-  ~GattClient();
+  virtual ~GattClient();
 
-  struct DeviceInfoProvider
-  {
-    std::function< std::string () > get_system_id;
-    std::function< std::string () > get_model_number;
-    std::function< std::string () > get_serial_number;
-    std::function< std::string () > get_firmware_revision;
-    std::function< std::string () > get_hardware_revision;
-    std::function< std::string () > get_software_revision;
-    std::function< std::string () > get_manufacturer_name;
-  };
-
-  using data_handler = std::function<void (cJSON* json)>;
-
-  void init(DeviceInfoProvider const& p);
-  void run();
-  void enqueueForSend(cJSON const* json);
-
-  inline void setDataHandler(data_handler h)
-    { m_data_handler = h; }
+  virtual void init() override;
+  virtual void enqueueForSend(char const* buff, int n) override; 
+  virtual void run() override;
+  virtual void setDataHandler(RpcDataHandler const& handler) override
+    { m_data_handler = handler; }
 
   void onDataChannelOut(gatt_db_attribute* attr, uint32_t id, uint16_t offset,
     uint8_t opcode, bt_att* att);
@@ -102,7 +89,7 @@ private:
   void buildGattService();
   void buildDeviceInfoService();
   void addDeviceInfoCharacteristic(gatt_db_attribute* service, uint16_t id,
-    std::function<std::string ()> const& read_callback);
+    std::string const& value);
   void buildJsonRpcService();
 
 private:
@@ -113,28 +100,27 @@ private:
   uint16_t            m_mtu;
   memory_stream       m_outgoing_queue;
   std::vector<char>   m_incoming_buff;
-  data_handler        m_data_handler;
-  DeviceInfoProvider  m_dis_provider;
   gatt_db_attribute*  m_data_channel;
   gatt_db_attribute*  m_blepoll;
   uint16_t            m_notify_handle;
   bool                m_service_change_enabled;
   int                 m_timeout_id;
   std::thread::id     m_mainloop_thread;
+  RpcDataHandler      m_data_handler;
 };
 
-class GattServer
+class GattServer : public RpcListener
 {
 public:
   GattServer();
-  ~GattServer();
+  virtual ~GattServer();
 
-  void init();
-  std::shared_ptr<GattClient> accept(GattClient::DeviceInfoProvider const& p);
+  virtual void init() override;
+  virtual std::shared_ptr<RpcConnectedClient> accept() override;
 
 private:
-  int       m_listen_fd;
-  bdaddr_t  m_local_interface;
+  int             m_listen_fd;
+  bdaddr_t        m_local_interface;
 };
 
 #endif

@@ -100,7 +100,7 @@ public:
       m_stream.pop();
     }
 
-    if (m_stream.front() == m_delimiter)
+    if ((m_stream.size() > 0) && (m_stream.front() == m_delimiter))
     {
       if (end_of_record)
         *end_of_record = true;
@@ -110,15 +110,13 @@ public:
     return bytes_read;
   }
 
-  void put_line(char const* s)
+  void put_line(char const* s, int n)
   {
     if (!s)
       return;
 
-    size_t n = strlen(s);
-
     std::lock_guard<std::mutex> guard(m_mutex);
-    for (size_t i = 0; i < n; ++i)
+    for (int i = 0; i < n; ++i)
       m_stream.push(s[i]);
     m_stream.push(m_delimiter);
   }

@@ -13,11 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#include "defs.h"
 #include "gattServer.h"
-#include "xLog.h"
+#include "../defs.h"
+#include "../xLog.h"
+#include "../util.h"
 
 #include <exception>
+#include <fstream>
 #include <sstream>
 #include <vector>
 
@@ -53,6 +55,130 @@ namespace
   std::string const kUuidRpcService       {"503553ca-eb90-11e8-ac5b-bb7e434023e8"};
   std::string const kUuidRpcInbox         {"510c87c8-eb90-11e8-b3dc-17292c2ecc2d"};
   std::string const kUuidRpcEPoll         {"5140f882-eb90-11e8-a835-13d2bd922d3f"};
+
+  std::string
+  PROC_getVariable(char const* file, char const* field)
+  {
+    char buff[256];
+    FILE* f = fopen(file, "r");
+    while (fgets(buff, sizeof(buff) - 1, f) != nullptr)
+    {
+      if (strncmp(buff, field, strlen(field)) == 0)
+      {
+        char* p = strchr(buff, ':');
+        if (p)
+        {
+          p++;
+          while (p && isspace(*p))
+            p++;
+        }
+        if (p)
+        {
+          size_t len = strlen(p);
+          if (len > 0)
+            p[len -1] = '\0';
+          return std::string(p);
+        }
+      }
+    }
+    return std::string();
+  }
+
+  std::vector<std::string> 
+  getDeviceInfoFromDB(std::string const& rCode)
+  {
+    std::ifstream mf("devices_db");
+    std::string line;
+
+    while (std::getline(mf, line))
+    {
+      std::vector<std::string> t = split(line, ",");
+      if (!t[0].compare(rCode))
+        return t;
+    }
+    
+    return std::vector<std::string>();
+  }
+
+  std::string
+  getContentFromFile(char const* file)
+  {
+    std::ifstream mf(file);
+    std::string system_id;
+    if (std::getline(mf, system_id)) 
+    {
+      return system_id;
+    }
+    else 
+    {
+      return std::string("unkown");
+    }
+  }
+  
+  std::string
+  DIS_getSystemId()
+  {
+    // get system id from machine id
+    return getContentFromFile("/etc/machine-id");
+  }
+
+  std::string DIS_getModelNumber()
+  {
+    return getContentFromFile("/proc/device-tree/model");
+  }
+
+  std::string DIS_getSerialNumber()
+  {
+    return PROC_getVariable("/proc/cpuinfo", "Serial");
+  }
+
+  std::string DIS_getFirmwareRevision()
+  {
+    // get version from command "uname -a"
+    std::string full = runCommand("uname -a");
+    size_t index = full.find(" SMP");
+    if (index != std::string::npos)
+    {
+      return full.substr(0, index);
+    }
+    return full;
+  }
+
+  std::string DIS_getHardwareRevision()
+  {
+    return PROC_getVariable("/proc/cpuinfo", "Revision");
+  }
+
+  std::string DIS_getSoftwareRevision()
+  {
+    return std::string(BLECONFD_VERSION);
+  }
+
+  std::string DIS_getManufacturerName()
+  {
+    std::string rCode = DIS_getHardwareRevision();
+    std::vector<std::string> deviceInfo = getDeviceInfoFromDB(rCode);
+    
+    if( deviceInfo.size() > 0 )
+    {
+      return deviceInfo[4];
+    }
+    return std::string("unkown");
+  }
+
+  /**
+   * dump Provider lines
+   **/
+  void DIS_dumpProvider()
+  {
+    XLOG_DEBUG("DIS_getSystemId         = %s", DIS_getSystemId().c_str());
+    XLOG_DEBUG("DIS_getModelNumber      = %s", DIS_getModelNumber().c_str());
+    XLOG_DEBUG("DIS_getSerialNumber     = %s", DIS_getSerialNumber().c_str());
+    XLOG_DEBUG("DIS_getFirmwareRevision = %s", DIS_getFirmwareRevision().c_str());
+    XLOG_DEBUG("DIS_getHardwareRevision = %s", DIS_getHardwareRevision().c_str());
+    XLOG_DEBUG("DIS_getSoftwareRevision = %s", DIS_getSoftwareRevision().c_str());
+    XLOG_DEBUG("DIS_getManufacturerName = %s", DIS_getManufacturerName().c_str());
+  }
 
   void DIS_writeCallback(gatt_db_attribute* UNUSED_PARAM(attr), int err, void* UNUSED_PARAM(argp))
   {
@@ -227,8 +353,8 @@ GattServer::init()
     throw_errno(errno, "failed to listen on bluetooth socket");
 }
 
-std::shared_ptr<GattClient>
-GattServer::accept(GattClient::DeviceInfoProvider const& p)
+std::shared_ptr<RpcConnectedClient>
+GattServer::accept()
 {
   mainloop_init();
 
@@ -246,16 +372,14 @@ GattServer::accept(GattClient::DeviceInfoProvider const& p)
   ba2str(&peer_addr.l2_bdaddr, remote_address);
   XLOG_INFO("accepted remote connection from:%s", remote_address);
 
-  std::shared_ptr<GattClient> clnt(new GattClient(soc));
-  clnt->init(p);
-
+  auto clnt = std::shared_ptr<GattClient>(new GattClient(soc));
+  clnt->init();
   return clnt;
 }
 
 void
-GattClient::init(DeviceInfoProvider const& p)
+GattClient::init()
 {
-  m_dis_provider = p;
   m_att = bt_att_new(m_fd, 0);
   if (!m_att)
   {
@@ -372,24 +496,15 @@ GattClient::onDataChannelIn(
 
     if (c == kRecordDelimiter)
     {
-      XLOG_INFO("found end of record, dispatching request");
-      cJSON* req = cJSON_Parse(&m_incoming_buff[0]);
-      if (!req)
+      if (!m_data_handler)
       {
-        // TODO
-        XLOG_ERROR("failed to parse incoming json");
+        // TODO:
+        XLOG_WARN("no data handler registered");
       }
       else
       {
-        if (!m_data_handler)
-        {
-          // TODO:
-          XLOG_WARN("no data handler registered");
-        }
-        else
-        {
-          m_data_handler(req);
-        }
+        m_incoming_buff.push_back('\0');
+        m_data_handler(&m_incoming_buff[0], m_incoming_buff.size());
       }
       m_incoming_buff.clear();
     }
@@ -631,7 +746,7 @@ void
 GattClient::addDeviceInfoCharacteristic(
   gatt_db_attribute* service,
   uint16_t           id,
-  std::function< std::string () > const& read_callback)
+  std::string const& value)
 {
   bt_uuid_t uuid;
   bt_uuid16_create(&uuid, id);
@@ -644,10 +759,6 @@ GattClient::addDeviceInfoCharacteristic(
     XLOG_CRITICAL("failed to create DIS characteristic %u", id);
     return;
   }
-
-  std::string value;
-  if (read_callback)
-    value = read_callback();
 
   uint8_t const* p = reinterpret_cast<uint8_t const *>(value.c_str());
 
@@ -667,13 +778,13 @@ GattClient::buildDeviceInfoService()
   // the error went away. Not sure what's going on?
   gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 30);
 
-  addDeviceInfoCharacteristic(service, kUuidSystemId, m_dis_provider.get_system_id);
-  addDeviceInfoCharacteristic(service, kUuidModelNumber, m_dis_provider.get_model_number);
-  addDeviceInfoCharacteristic(service, kUuidSerialNumber, m_dis_provider.get_serial_number);
-  addDeviceInfoCharacteristic(service, kUuidFirmwareRevision, m_dis_provider.get_firmware_revision);
-  addDeviceInfoCharacteristic(service, kUuidHardwareRevision, m_dis_provider.get_hardware_revision);
-  addDeviceInfoCharacteristic(service, kUuidSoftwareRevision, m_dis_provider.get_software_revision);
-  addDeviceInfoCharacteristic(service, kUuidManufacturerName, m_dis_provider.get_manufacturer_name);
+  addDeviceInfoCharacteristic(service, kUuidSystemId, DIS_getSystemId());
+  addDeviceInfoCharacteristic(service, kUuidModelNumber, DIS_getModelNumber());
+  addDeviceInfoCharacteristic(service, kUuidSerialNumber, DIS_getSerialNumber());
+  addDeviceInfoCharacteristic(service, kUuidFirmwareRevision, DIS_getFirmwareRevision());
+  addDeviceInfoCharacteristic(service, kUuidHardwareRevision, DIS_getHardwareRevision());
+  addDeviceInfoCharacteristic(service, kUuidSoftwareRevision, DIS_getSoftwareRevision());
+  addDeviceInfoCharacteristic(service, kUuidManufacturerName, DIS_getManufacturerName());
 
   gatt_db_service_set_active(service, true);
 }
@@ -721,19 +832,20 @@ GattClient::run()
 }
 
 GattClient::GattClient(int fd)
-  : m_fd(fd)
+  : RpcConnectedClient()
+  , m_fd(fd)
   , m_att(nullptr)
   , m_db(nullptr)
   , m_server(nullptr)
   , m_mtu(16)
   , m_outgoing_queue(kRecordDelimiter)
   , m_incoming_buff()
-  , m_data_handler(nullptr)
   , m_data_channel(nullptr)
   , m_blepoll(nullptr)
   , m_service_change_enabled(false)
   , m_timeout_id(-1)
   , m_mainloop_thread()
+  , m_data_handler(nullptr)
 {
 }
 
@@ -750,17 +862,21 @@ GattClient::~GattClient()
 }
 
 void
-GattClient::enqueueForSend(cJSON const* json)
+GattClient::enqueueForSend(char const* buff, int n)
 {
-  if (!json)
+  if (!buff)
   {
-    XLOG_INFO("trying to enqueue null json document");
+    XLOG_WARN("trying to enqueue null buffer");
     return;
   }
 
-  char* s = cJSON_PrintUnformatted(json);
-  m_outgoing_queue.put_line(s);
-  free(s);
+  if (n <= 0)
+  {
+    XLOG_WARN("invalid buffer length:%d", n);
+    return;
+  }
+
+  m_outgoing_queue.put_line(buff, n);
 }
 
 void

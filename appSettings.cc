@@ -24,6 +24,47 @@ static char const* kDefaultGroup = "User";
 static char const* kBLE = "ble";
 static char const* kWifi = "wlan";
 
+static int appSettings_init(char const* settings_file);
+static cJSON* appSettings_set(cJSON const* req);
+static cJSON* appSettings_get(cJSON const* req);
+
+AppSettingsService::AppSettingsService()
+{
+}
+
+AppSettingsService::~AppSettingsService()
+{
+}
+
+void
+AppSettingsService::init(std::string const& configFile,
+  RpcNotificationFunction const& UNUSED_PARAM(callback))
+{
+  appSettings_init(configFile.c_str());
+}
+
+std::string
+AppSettingsService::name() const
+{
+  return "app-settings";
+}
+
+std::vector<std::string>
+AppSettingsService::methodNames() const
+{
+  return std::vector<std::string> { "get", "set" };
+}
+
+RpcMethod
+AppSettingsService::method(std::string const& name) const
+{
+  if (name == "get")
+    return appSettings_get;
+  else if (name == "set")
+    return appSettings_set;
+  return nullptr;
+}
+
 int
 appSettings_init(char const* settings_file)
 {
@@ -76,8 +117,9 @@ appSettings_get_wifi_value(char const* key)
   return appSettings_get_string_value(key, kWifi);
 }
 
-int
-appSettings_set(cJSON const* req, cJSON** res)
+
+cJSON*
+appSettings_set(cJSON const* req)
 {
   if (!key_file)
   {
@@ -94,11 +136,14 @@ appSettings_set(cJSON const* req, cJSON** res)
 
   // TODO
 
-  return jsonRpc_notImplemented(res);
+  cJSON* res = nullptr;
+  jsonRpc_notImplemented(&res);
+  return res;
 }
 
-int
-appSettings_get(cJSON const* req, cJSON** res)
+
+cJSON*
+appSettings_get(cJSON const* req)
 {
   if (!key_file)
   {
@@ -112,5 +157,7 @@ appSettings_get(cJSON const* req, cJSON** res)
 
   // TODO
 
-  return jsonRpc_notImplemented(res);
+  cJSON* res = nullptr;
+  jsonRpc_notImplemented(&res);
+  return res;
 }

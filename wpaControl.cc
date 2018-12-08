@@ -18,6 +18,7 @@
 #include "xLog.h"
 #include "jsonRpc.h"
 #include "util.h"
+#include "appSettings.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -44,10 +45,10 @@ static cJSON* wpaControl_createResponse(std::string const& s);
 static cJSON* wpaControl_createError(int err);
 static void*  wpaControl_readNotificationSocket(void* argp);
 static void   wpaControl_reportEvent(char const* buff, int n);
-static jsonRpcResponseCallback responseHandler = NULL;
+static RpcNotificationFunction responseHandler = nullptr;
 
 int
-wpaControl_init(char const* control_socket, jsonRpcResponseCallback handler)
+wpaControl_init(char const* control_socket, RpcNotificationFunction const& callback)
 {
   if (!control_socket)
   {
@@ -55,13 +56,13 @@ wpaControl_init(char const* control_socket, jsonRpcResponseCallback handler)
     return EINVAL;
   }
 
-  if (!handler)
+  if (!callback)
   {
     XLOG_WARN("NULL response callback handler");
     return EINVAL;
   }
 
-  responseHandler = handler;
+  responseHandler = callback;
 
   std::string wpa_socket_name = control_socket;
   struct wpa_ctrl* wpa_notify = nullptr;
@@ -169,9 +170,8 @@ wpaControl_reportEvent(char const* buff, int n)
   cJSON_AddItemToObject(e, "jsonrpc", cJSON_CreateString(kJsonRpcVersion));
   cJSON_AddItemToObject(e, "method", cJSON_CreateString("wpa_event"));
   cJSON_AddItemToObject(e, "params", cJSON_CreateString(buff));
-
-
   responseHandler(e);
+  cJSON_Delete(e);
 }
 
 void*
@@ -396,8 +396,9 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
 }
 #endif
 
-int
-wpaControl_connectToNetwork(cJSON const* req, cJSON** res)
+
+cJSON*
+wpaControl_connectToNetwork(cJSON const* req)
 {
   char* s = cJSON_Print(req);
   XLOG_INFO("connect:%s", s);
@@ -407,21 +408,21 @@ wpaControl_connectToNetwork(cJSON const* req, cJSON** res)
   if (!params)
   {
     XLOG_WARN("missing params");
-    return -1;
+    return nullptr;
   }
 
   cJSON* creds = cJSON_GetObjectItem(params, "cred");
   if (!creds)
   {
     XLOG_WARN("params is missing 'creds' object");
-    return -1;
+    return nullptr;
   }
 
   cJSON* disco = cJSON_GetObjectItem(params, "discovery");
   if (!disco)
   {
     XLOG_WARN("params is missing 'discovery' object");
-    return -1;
+    return nullptr;
   }
 
   char const* pass = jsonRpc_getString(creds, "pass", true);
@@ -436,29 +437,30 @@ wpaControl_connectToNetwork(cJSON const* req, cJSON** res)
   {
     int err = errno;
     XLOG_WARN("failed to create network:%s", strerror(err));
-    return err;
+    return nullptr;
   }
 
   XLOG_INFO("new network created, index = %d", networkId);
 
   wpaControl_connect_WPA2(networkId, ssid, pass);
-
-  *res = nullptr;
-  return 0;
+  return nullptr;
 }
 
-int
-wpaControl_getStatus(cJSON const* UNUSED_PARAM(req), cJSON** res)
+
+cJSON*
+wpaControl_getStatus(cJSON const* UNUSED_PARAM(req))
 {
   std::string buff;
 
+  cJSON* res = nullptr;
+
   int ret = wpaControl_command("STATUS", buff);
   if (ret)
-    *res = wpaControl_createError(ret);
+    res = wpaControl_createError(ret);
   else
-    *res = wpaControl_createResponse(buff);
+    res = wpaControl_createResponse(buff);
 
-  return 0;
+  return res;
 }
 
 cJSON*
@@ -503,4 +505,45 @@ wpaControl_createError(int err)
   jsonRpc_makeError(&temp, err, "%s", s);
 
   return temp;
+}
+
+
+WiFiService::WiFiService()
+{
+}
+
+WiFiService::~WiFiService()
+{
+  wpaControl_shutdown();
+}
+
+void
+WiFiService::init(std::string const& UNUSED_PARAM(configFile),
+  RpcNotificationFunction const& callback)
+{
+  char const* iface = appSettings_get_wifi_value("interface");
+  wpaControl_init(iface, callback);
+}
+
+std::string
+WiFiService::name() const
+{
+  return "wifi";
+}
+
+std::vector<std::string>
+WiFiService::methodNames() const
+{
+  return std::vector<std::string> { "connect", "get-status" };
+}
+
+RpcMethod
+WiFiService::method(std::string const& name) const
+{
+  if (name == "connect")
+    return wpaControl_connectToNetwork;
+  else if (name == "get-status")
+    return wpaControl_getStatus;
+  else
+    return nullptr;
 }
