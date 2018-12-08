@@ -12,18 +12,18 @@ WITH_BLUEZ=1
 
 SRCS=\
   main.cc \
-  wpaControl.cc \
   jsonRpc.cc \
-  xLog.cc \
-	beacon.cc \
+  rpclogger.cc \
   util.cc \
   rpcserver.cc \
-  appSettings.cc
+  appsettings.cc \
+  wifiservice.cc
 
 ifneq ($(WITH_BLUEZ),)
 	CPPFLAGS+=-DWITH_BLUEZ
   BLUEZ_LIBS+=-L$(BLUEZ_HOME)/src/.libs/ -lshared-mainloop -L$(BLUEZ_HOME)/lib/.libs -lbluetooth-internal
   SRCS+=gattServer.cc
+  SRCS+=beacon.cc
 endif
 
 OBJS=$(patsubst %.cc, %.o, $(notdir $(SRCS)))
@@ -42,4 +42,13 @@ os_unix.o: $(HOSTAPD_HOME)/src/utils/os_unix.c
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
 gattServer.o: bluez/gattServer.cc
+	$(CXX) $(CPPFLAGS) -c $< -o $@
+
+beacon.o: bluez/beacon.cc
+	$(CXX) $(CPPFLAGS) -c $< -o $@
+
+appsettings.o: services/appsettings.cc
+	$(CXX) $(CPPFLAGS) -c $< -o $@
+
+wifiservice.o: services/wifiservice.cc
 	$(CXX) $(CPPFLAGS) -c $< -o $@

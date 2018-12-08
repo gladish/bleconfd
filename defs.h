@@ -16,14 +16,9 @@
 #ifndef __BLECONFD_DEFS_H__
 #define __BLECONFD_DEFS_H__
 
-#include <functional>
-#include <cJSON.h>
-
 #define UNUSED_PARAM(X) UNUSED_ ## X __attribute__((__unused__))
 #define BLECONFD_VERSION "1.0"
 
 #define kJsonRpcVersion "2.0"
-
-using jsonRpcResponseCallback = std::function< void (cJSON* res) >;
 
 #endif

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "jsonRpc.h"
-#include "xLog.h"
+#include "rpclogger.h"
 
 #include <iomanip>
 #include <map>

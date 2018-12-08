@@ -13,12 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#include "defs.h"
-#include "wpaControl.h"
-#include "xLog.h"
-#include "jsonRpc.h"
-#include "util.h"
-#include "appSettings.h"
+#include "wifiservice.h"
+#include "appsettings.h"
+
+#include "../defs.h"
+#include "../rpclogger.h"
+#include "../jsonRpc.h"
+#include "../util.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -36,6 +37,15 @@
 
 #include <wpa_ctrl.h>
 #include <cJSON.h>
+
+extern "C"
+{
+  RpcService*
+  WiFiService_Create()
+  {
+    return new WiFiService();
+  }
+}
 
 static struct wpa_ctrl* wpa_request = nullptr;
 static int wpa_shutdown_pipe[2];
@@ -525,6 +535,18 @@ WiFiService::init(std::string const& UNUSED_PARAM(configFile),
   char const* iface = appSettings_get_wifi_value("interface");
   wpaControl_init(iface, callback);
 
-  registerMethod("get-status", [](cJSON const* req) -> cJSON* { return wpaControl_getStatus(req); });
-  registerMethod("connect", [](cJSON const* req) -> cJSON* { return wpaControl_connectToNetwork(req); });
+  registerMethod("get-status", [this](cJSON const* req) -> cJSON* { return this->getStatus(req); });
+  registerMethod("connect", [this](cJSON const* req) -> cJSON* { return this->connect(req); });
+}
+
+cJSON*
+WiFiService::getStatus(cJSON const* req)
+{
+  return wpaControl_getStatus(req);
+}
+
+cJSON*
+WiFiService::connect(cJSON const* req)
+{
+  return wpaControl_connectToNetwork(req);
 }

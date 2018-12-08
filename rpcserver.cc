@@ -15,14 +15,16 @@
  */
 #include "defs.h"
 #include "rpcserver.h"
-#include "xLog.h"
+#include "rpclogger.h"
 
 #ifdef WITH_BLUEZ
 #include "bluez/gattServer.h"
 #endif
 
-#include "appSettings.h"
-#include "wpaControl.h"
+#include <stdarg.h>
+
+extern "C" RpcService* AppSettings_Create();
+extern "C" RpcService* WiFiService_Create();
 
 namespace
 {
@@ -74,8 +76,8 @@ services()
 {
   std::vector< std::shared_ptr<RpcService> > services
   {
-    std::shared_ptr<RpcService>(new AppSettingsService),
-    std::shared_ptr<RpcService>(new WiFiService)
+    std::shared_ptr<RpcService>(AppSettings_Create()),
+    std::shared_ptr<RpcService>(WiFiService_Create())
   };
   return services;
 }
@@ -117,6 +119,36 @@ void
 BasicRpcService::registerMethod(std::string const& name, RpcMethod const& method)
 {
   m_methods.insert(std::make_pair(name, method));
+}
+
+cJSON*
+BasicRpcService::makeError(int code, char const* format, ...)
+{
+  va_list ap;
+  va_start(ap, format);
+
+  int n = vsnprintf(0, 0, format, ap);
+  va_end(ap);
+
+  char* buff = new char[n + 1 ];
+  buff[n] = '\0';
+
+  va_start(ap, format);
+  n = vsnprintf(buff, n + 1, format, ap);
+
+  cJSON* res = cJSON_CreateObject();
+  cJSON_AddItemToObject(res, "code", cJSON_CreateNumber(code));
+  cJSON_AddItemToObject(res, "message", cJSON_CreateString(buff));
+
+  delete [] buff;
+
+  return res;
+}
+
+cJSON*
+BasicRpcService::notImplemented(char const* methodName)
+{
+  return makeError(ENOENT, "method %s not found", methodName);
 }
 
 cJSON*

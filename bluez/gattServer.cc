@@ -15,7 +15,7 @@
 //
 #include "gattServer.h"
 #include "../defs.h"
-#include "../xLog.h"
+#include "../rpclogger.h"
 #include "../util.h"
 
 #include <exception>

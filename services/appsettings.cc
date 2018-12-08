@@ -13,9 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#include "appSettings.h"
-#include "jsonRpc.h"
-#include "xLog.h"
+#include "appsettings.h"
+#include "../rpclogger.h"
+#include "../jsonRpc.h"
 
 #include <glib.h>
 
@@ -24,9 +24,14 @@ static char const* kDefaultGroup = "User";
 static char const* kBLE = "ble";
 static char const* kWifi = "wlan";
 
-static int appSettings_init(char const* settings_file);
-static cJSON* appSettings_set(cJSON const* req);
-static cJSON* appSettings_get(cJSON const* req);
+extern "C"
+{
+  RpcService*
+  AppSettings_Create()
+  {
+    return new AppSettingsService();
+  }
+}
 
 AppSettingsService::AppSettingsService()
   : BasicRpcService("app-settings")
@@ -41,36 +46,14 @@ void
 AppSettingsService::init(std::string const& configFile,
   RpcNotificationFunction const& UNUSED_PARAM(callback))
 {
-  appSettings_init(configFile.c_str());
-  registerMethod("get", [this](cJSON const* req) -> cJSON* { return this->get(req); });
-  registerMethod("set", [this](cJSON const* req) -> cJSON* { return this->set(req); });
-}
-
-cJSON*
-AppSettingsService::get(cJSON const* req)
-{
-  return appSettings_get(req);
-}
-
-cJSON*
-AppSettingsService::set(cJSON const* req)
-{
-  return appSettings_set(req);
-}
-
-int
-appSettings_init(char const* settings_file)
-{
   GKeyFileFlags flags = G_KEY_FILE_KEEP_COMMENTS;
 
   g_autoptr(GError) error = nullptr;
-  if (!g_key_file_load_from_file(key_file, settings_file, flags, &error))
+  if (!g_key_file_load_from_file(key_file, configFile.c_str(), flags, &error))
   {
     if (!g_error_matches(error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
     {
-      XLOG_ERROR("failed to load settings file %s. %s", settings_file,
-        error->message);
-      return error->code;
+      XLOG_ERROR("failed to load settings file %s. %s", configFile.c_str(), error->message);
     }
     else
     {
@@ -78,7 +61,20 @@ appSettings_init(char const* settings_file)
     }
   }
 
-  return 0;
+  registerMethod("get", [this](cJSON const* req) -> cJSON* { return this->get(req); });
+  registerMethod("set", [this](cJSON const* req) -> cJSON* { return this->set(req); });
+}
+
+cJSON*
+AppSettingsService::get(cJSON const* req)
+{
+  return notImplemented("get");
+}
+
+cJSON*
+AppSettingsService::set(cJSON const* req)
+{
+  return notImplemented("set");
 }
 
 // get string value from local ini file
@@ -108,49 +104,4 @@ char const*
 appSettings_get_wifi_value(char const* key)
 {
   return appSettings_get_string_value(key, kWifi);
-}
-
-
-cJSON*
-appSettings_set(cJSON const* req)
-{
-  if (!key_file)
-  {
-    // TODO
-  }
-
-  char const* group = jsonRpc_getString(req, "group", false);
-  if (!group)
-    group = kDefaultGroup;
-
-//  char const* name = jsonRpc_getString(req, "name");
-
-  XLOG_JSON(logLevel_Debug, req);
-
-  // TODO
-
-  cJSON* res = nullptr;
-  jsonRpc_notImplemented(&res);
-  return res;
-}
-
-
-cJSON*
-appSettings_get(cJSON const* req)
-{
-  if (!key_file)
-  {
-    // TODO
-  }
-
-//  char const* group = jsonRpc_getString(req, "group");
-//  char const* name = jsonRpc_getString(req, "name");
-
-  XLOG_JSON(logLevel_Debug, req);
-
-  // TODO
-
-  cJSON* res = nullptr;
-  jsonRpc_notImplemented(&res);
-  return res;
 }

@@ -13,40 +13,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#ifndef __APP_SETTINGS_H__
-#define __APP_SETTINGS_H__
+#ifndef __WPA_CONTROL_H__
+#define __WPA_CONTROL_H__
 
-#include "defs.h"
-#include "rpcserver.h"
+#include "../defs.h"
+#include "../rpcserver.h"
 
-class AppSettingsService : public BasicRpcService
+class WiFiService : public BasicRpcService
 {
 public:
-  AppSettingsService();
-  virtual ~AppSettingsService();
+  WiFiService();
+  virtual ~WiFiService();
   virtual void init(std::string const& configFile,
-    RpcNotificationFunction const& callback) override;
-
+      RpcNotificationFunction const& callback) override;
 private:
-  cJSON* get(cJSON const* req);
-  cJSON* set(cJSON const* req);
+  cJSON* getStatus(cJSON const* req);
+  cJSON* connect(cJSON const* req);
 };
-
-// TODO: I don't like exposing this, but we use these as a service and for
-// configuring the application
-
-/**
- * get ble values
- * @param key  the key
- * @return  the value
- */
-char const* appSettings_get_ble_value(char const* key);
-
-/**
- * get wifi values
- * @param key  the key
- * @return  the value
- */
-char const* appSettings_get_wifi_value(char const* key);
 
 #endif

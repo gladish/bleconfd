@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "xLog.h"
+#include "rpclogger.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -30,39 +30,39 @@ namespace
   struct LevelMapping
   {
     char const* s;
-    logLevel l;
+    RpcLogLevel l;
   };
 
   LevelMapping mappings[] = 
   {
-    { "CRIT",   logLevel_Critical },
-    { "ERROR",  logLevel_Error },
-    { "WARN",   logLevel_Warning },
-    { "INFO",   logLevel_Info },
-    { "DEBUG",  logLevel_Debug }
+    { "CRIT",   RpcLogLevel::Critical },
+    { "ERROR",  RpcLogLevel::Error },
+    { "WARN",   RpcLogLevel::Warning },
+    { "INFO",   RpcLogLevel::Info },
+    { "DEBUG",  RpcLogLevel::Debug }
   };
 
   int const kNumMappings = sizeof(mappings) / sizeof(LevelMapping);
   char const* kUnknownMapping = "UNKNOWN";
 
-  int toSyslogPriority(logLevel level)
+  int toSyslogPriority(RpcLogLevel level)
   {
     int p = LOG_EMERG;
     switch (level)
     {
-      case logLevel_Critical:
+      case RpcLogLevel::Critical:
         p = LOG_CRIT;
         break;
-      case logLevel_Error:
+      case RpcLogLevel::Error:
         p = LOG_ERR;
         break;
-      case logLevel_Warning:
+      case RpcLogLevel::Warning:
         p = LOG_WARNING;
         break;
-      case logLevel_Info:
+      case RpcLogLevel::Info:
         p = LOG_INFO;
         break;
-      case logLevel_Debug:
+      case RpcLogLevel::Debug:
         p = LOG_DEBUG;
         break;
     }
@@ -71,13 +71,13 @@ namespace
 }
 
 void 
-xLog::log(logLevel level, char const* /*file*/, int /*line*/, char const* format, ...)
+RpcLogger::log(RpcLogLevel level, char const* /*file*/, int /*line*/, char const* format, ...)
 {
 
   va_list args;
   va_start(args, format);
 
-  if (m_dest == logDest_Syslog)
+  if (m_dest == RpcLogDestination::Syslog)
   {
     int priority = toSyslogPriority(level);
     vsyslog(priority, format, args);
@@ -95,7 +95,7 @@ xLog::log(logLevel level, char const* /*file*/, int /*line*/, char const* format
 }
 
 char const*
-xLog::levelToString(logLevel level)
+RpcLogger::levelToString(RpcLogLevel level)
 {
   for (int i = 0; i < kNumMappings; ++i)
   {
@@ -105,8 +105,8 @@ xLog::levelToString(logLevel level)
   return kUnknownMapping;
 }
 
-logLevel
-xLog::stringToLevel(char const* level)
+RpcLogLevel
+RpcLogger::stringToLevel(char const* level)
 {
   if (level)
   {
@@ -119,26 +119,26 @@ xLog::stringToLevel(char const* level)
   throw std::runtime_error("invalid logging level " + std::string(level));
 }
 
-xLog&
-xLog::getLogger()
+RpcLogger&
+RpcLogger::logger()
 {
-  static xLog logger;
+  static RpcLogger logger;
   return logger;
 }
 
-xLog::xLog()
-  : m_level(logLevel_Info)
-  , m_dest(logDest_Stdout)
+RpcLogger::RpcLogger()
+  : m_level(RpcLogLevel::Info)
+  , m_dest(RpcLogDestination::Stdout)
 {
 
 }
 
-void xLog::setLevel(logLevel level)
+void RpcLogger::setLevel(RpcLogLevel level)
 {
   m_level = level;
 }
 
-void xLog::setDestination(logDest dest)
+void RpcLogger::setDestination(RpcLogDestination dest)
 {
   m_dest = dest;
 }

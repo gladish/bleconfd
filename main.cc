@@ -13,8 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#include "xLog.h"
-#include "beacon.h"
+#include "rpclogger.h"
 #include "rpcserver.h"
 
 #include <getopt.h>
@@ -50,7 +49,7 @@ std::vector< std::shared_ptr<RpcService> > services();
 int main(int argc, char* argv[])
 {
   std::string configFile = "bleconfd.ini";
-  xLog::getLogger().setLevel(logLevel_Info);
+  RpcLogger::logger().setLevel(RpcLogLevel::Info);
 
   while (true)
   {
@@ -72,7 +71,7 @@ int main(int argc, char* argv[])
         configFile = optarg;
         break;
       case 'd':
-        xLog::getLogger().setLevel(logLevel_Debug);
+        RpcLogger::logger().setLevel(RpcLogLevel::Debug);
       default:
         break;
     }

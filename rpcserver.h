@@ -67,6 +67,10 @@ protected:
 
   void registerMethod(std::string const& name, RpcMethod const& method);
 
+  // helpers
+  cJSON* makeError(int code, char const* format, ...) __attribute__((format (printf, 3, 4)));
+  cJSON* notImplemented(char const* methodName);
+
 private:
   RpcMethodMap  m_methods;
   std::string   m_name;
