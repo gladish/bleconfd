@@ -39,6 +39,24 @@ namespace
     cJSON* m_json;
   };
 
+  struct RpcMethodInfo
+  {
+    std::string ServiceName;
+    std::string MethodName;
+  };
+
+  RpcMethodInfo
+  parseMethod(char const* s)
+  {
+    RpcMethodInfo methodInfo;
+    char const* p = strchr(s, '-');
+    if (p)
+    {
+      methodInfo.ServiceName = std::string(s, (p-s));
+      methodInfo.MethodName = std::string(p + 1);
+    }
+    return methodInfo;
+  }
 }
 
 std::shared_ptr<RpcListener>
@@ -62,6 +80,75 @@ services()
   return services;
 }
 
+RpcService::RpcService()
+{
+}
+
+RpcService::~RpcService()
+{
+}
+
+BasicRpcService::BasicRpcService(std::string const& name)
+  : RpcService()
+  , m_name(name)
+{
+}
+
+BasicRpcService::~BasicRpcService()
+{
+}
+
+std::string
+BasicRpcService::name() const
+{
+  return m_name;
+}
+
+std::vector<std::string>
+BasicRpcService::methodNames() const
+{
+  std::vector<std::string> names;
+  for (auto itr : m_methods)
+    names.push_back(itr.first);
+  return names;
+}
+
+void
+BasicRpcService::registerMethod(std::string const& name, RpcMethod const& method)
+{
+  m_methods.insert(std::make_pair(name, method));
+}
+
+cJSON*
+BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
+{
+  if (!req)
+  {
+    XLOG_ERROR("cannot invoke method %s-%s with null request",
+      m_name.c_str(), name.c_str());
+    // TODO: return error
+    return nullptr;
+  }
+
+  XLOG_INFO("invoke method:%s-%s", m_name.c_str(), name.c_str());
+
+  char* s = cJSON_Print(req);
+  if (s)
+  {
+    XLOG_INFO("%s", s);
+    free(s);
+  }
+
+  auto itr = m_methods.find(name);
+  if (itr == m_methods.end())
+  {
+    XLOG_WARN("method %s-%s not found", m_name.c_str(), name.c_str());
+    // TODO: return error
+    return nullptr;
+  }
+
+  return itr->second(req);
+}
 
 RpcServer::RpcServer(std::string const& configFile)
   : m_config_file(configFile)
@@ -186,23 +273,18 @@ RpcServer::processRequest(cJSON const* req)
 
   try
   {
-    RpcMethod func = nullptr;
-    auto itr = m_methods.find(method->valuestring);
-    if (itr != m_methods.end())
+    RpcMethodInfo methodInfo = parseMethod(method->valuestring);
+
+    auto service = m_services.find(methodInfo.ServiceName);
+    if (service == m_services.end())
     {
-      func = itr->second;
+      // TODO
+      XLOG_ERROR("failed to find service:%s", methodInfo.ServiceName.c_str());
+      return;
     }
     else
     {
-      XLOG_ERROR("failed to find registered function '%s'", method->valuestring);
-    }
-
-    if (func)
-    {
-      XLOG_INFO("found %s and executing", method->valuestring);
-
-      cJSON* res = func(req);
-
+      cJSON* res = service->second->invokeMethod(methodInfo.MethodName, req);
       if (res)
       {
         cJSON_AddItemToObject(envelope, "result", res);
@@ -239,29 +321,6 @@ RpcServer::registerService(std::shared_ptr<RpcService> const& service)
   XLOG_INFO("registering service:%s", service->name().c_str());
   RpcNotificationFunction callback = std::bind(&RpcServer::enqueueAsyncMessage, this,
     std::placeholders::_1);
-
-  for (auto const& m: service->methodNames())
-    registerMethodForService(service, m, service->method(m));
+  m_services.insert(std::make_pair(service->name(), service));
   service->init(m_config_file, callback);
-}
-
-void
-RpcServer::registerMethodForService(std::shared_ptr<RpcService> const& service,
-  std::string const& methodName, RpcMethod const& method)
-{
-  std::stringstream buff;
-  buff << service->name();
-  buff << '-';
-  buff << methodName;
-  std::string name = buff.str();
-
-  if (method == nullptr)
-  {
-    XLOG_WARN("can't register null method for:%s", name.c_str());
-    return;
-  }
-
-
-  XLOG_INFO("\tregistering method:%s", name.c_str());
-  m_methods.insert(std::make_pair(name.c_str(), method));
 }

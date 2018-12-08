@@ -29,6 +29,7 @@ static cJSON* appSettings_set(cJSON const* req);
 static cJSON* appSettings_get(cJSON const* req);
 
 AppSettingsService::AppSettingsService()
+  : BasicRpcService("app-settings")
 {
 }
 
@@ -41,28 +42,20 @@ AppSettingsService::init(std::string const& configFile,
   RpcNotificationFunction const& UNUSED_PARAM(callback))
 {
   appSettings_init(configFile.c_str());
+  registerMethod("get", [this](cJSON const* req) -> cJSON* { return this->get(req); });
+  registerMethod("set", [this](cJSON const* req) -> cJSON* { return this->set(req); });
 }
 
-std::string
-AppSettingsService::name() const
+cJSON*
+AppSettingsService::get(cJSON const* req)
 {
-  return "app-settings";
+  return appSettings_get(req);
 }
 
-std::vector<std::string>
-AppSettingsService::methodNames() const
+cJSON*
+AppSettingsService::set(cJSON const* req)
 {
-  return std::vector<std::string> { "get", "set" };
-}
-
-RpcMethod
-AppSettingsService::method(std::string const& name) const
-{
-  if (name == "get")
-    return appSettings_get;
-  else if (name == "set")
-    return appSettings_set;
-  return nullptr;
+  return appSettings_set(req);
 }
 
 int

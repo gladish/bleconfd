@@ -19,16 +19,13 @@
 #include "defs.h"
 #include "rpcserver.h"
 
-class WiFiService : public RpcService
+class WiFiService : public BasicRpcService
 {
 public:
   WiFiService();
   virtual ~WiFiService();
   virtual void init(std::string const& configFile,
-    RpcNotificationFunction const& callback) override;
-  virtual std::string name() const override;
-  virtual std::vector<std::string> methodNames() const override;
-  virtual RpcMethod method(std::string const& name) const override;
+      RpcNotificationFunction const& callback) override;
 };
 
 #endif

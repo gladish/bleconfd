@@ -509,6 +509,7 @@ wpaControl_createError(int err)
 
 
 WiFiService::WiFiService()
+  : BasicRpcService("wifi")
 {
 }
 
@@ -523,27 +524,7 @@ WiFiService::init(std::string const& UNUSED_PARAM(configFile),
 {
   char const* iface = appSettings_get_wifi_value("interface");
   wpaControl_init(iface, callback);
-}
 
-std::string
-WiFiService::name() const
-{
-  return "wifi";
-}
-
-std::vector<std::string>
-WiFiService::methodNames() const
-{
-  return std::vector<std::string> { "connect", "get-status" };
-}
-
-RpcMethod
-WiFiService::method(std::string const& name) const
-{
-  if (name == "connect")
-    return wpaControl_connectToNetwork;
-  else if (name == "get-status")
-    return wpaControl_getStatus;
-  else
-    return nullptr;
+  registerMethod("get-status", [](cJSON const* req) -> cJSON* { return wpaControl_getStatus(req); });
+  registerMethod("connect", [](cJSON const* req) -> cJSON* { return wpaControl_connectToNetwork(req); });
 }

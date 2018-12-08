@@ -19,18 +19,17 @@
 #include "defs.h"
 #include "rpcserver.h"
 
-class AppSettingsService : public RpcService
+class AppSettingsService : public BasicRpcService
 {
 public:
   AppSettingsService();
   virtual ~AppSettingsService();
-
-public:
   virtual void init(std::string const& configFile,
     RpcNotificationFunction const& callback) override;
-  virtual std::string name() const override;
-  virtual std::vector<std::string> methodNames() const override;
-  virtual RpcMethod method(std::string const& name) const override;
+
+private:
+  cJSON* get(cJSON const* req);
+  cJSON* set(cJSON const* req);
 };
 
 // TODO: I don't like exposing this, but we use these as a service and for

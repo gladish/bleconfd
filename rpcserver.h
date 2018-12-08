@@ -28,7 +28,6 @@
 struct cJSON;
 
 using RpcDataHandler = std::function<void (char const* buff, int n)>;
-using RpcMethod = std::function<cJSON* (cJSON const* req)>;
 using RpcNotificationFunction = std::function<void (cJSON const* json)>;
 
 class RpcConnectedClient
@@ -45,12 +44,32 @@ public:
 class RpcService
 {
 public:
-  RpcService() { }
-  virtual ~RpcService() { }
-  virtual void init(std::string const& configFile, RpcNotificationFunction const& callback) = 0;
+  RpcService();
+  virtual ~RpcService();
+  virtual void init(std::string const& configFile, RpcNotificationFunction const& callback)  = 0;
   virtual std::string name() const = 0;
   virtual std::vector<std::string> methodNames() const = 0;
-  virtual RpcMethod method(std::string const& name) const = 0;
+  virtual cJSON* invokeMethod(std::string const& name, cJSON const* req) = 0;
+};
+
+class BasicRpcService : public RpcService
+{
+public:
+  BasicRpcService(std::string const& name);
+  virtual ~BasicRpcService();
+  virtual std::string name() const override;
+  virtual std::vector<std::string> methodNames() const override;
+  virtual cJSON* invokeMethod(std::string const& name, cJSON const* req) override;
+
+protected:
+  using RpcMethod = std::function<cJSON* (cJSON const* req)>;
+  using RpcMethodMap = std::map< std::string, RpcMethod >;
+
+  void registerMethod(std::string const& name, RpcMethod const& method);
+
+private:
+  RpcMethodMap  m_methods;
+  std::string   m_name;
 };
 
 class RpcListener
@@ -82,8 +101,6 @@ public:
 private:
   void processIncomingQueue();
   void processRequest(cJSON const* req);
-  void registerMethodForService(std::shared_ptr<RpcService> const& service,
-    std::string const& name, RpcMethod const& method);
 
 private:
   std::shared_ptr<RpcConnectedClient> m_client;
@@ -91,7 +108,7 @@ private:
   std::shared_ptr<std::thread>        m_dispatch_thread;
   std::queue<cJSON *>                 m_incoming_queue;
   std::condition_variable             m_cond;
-  std::map< std::string, RpcMethod >  m_methods;
+  std::map< std::string, std::shared_ptr<RpcService> > m_services;
   std::string                         m_config_file;
 };
 
