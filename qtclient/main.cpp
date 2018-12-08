@@ -52,9 +52,32 @@ QJsonDocument test_getWiFiStatus()
   obj["jsonrpc"] = "2.0";
   obj["method"] = "wifi-get-status";
   obj["id"] = 1;
-
   doc.setObject(obj);
+  return doc;
+}
 
+QJsonDocument test_WiFiConnect()
+{
+  QJsonDocument doc;
+  QJsonObject obj;
+  obj["jsonrpc"] = "2.0";
+  obj["method"] = "wifi-connect";
+  obj["id"] = 2;
+
+  QJsonObject params;
+  params["wi-fi_tech"] = "infra";
+
+  QJsonObject discovery;
+  discovery["ssid"] = "<here>";
+  params["discovery"] = discovery;
+
+  QJsonObject cred;
+  cred["akm"] = "psk";
+  cred["pass"] = "<here>";
+  params["cred"] = cred;
+
+  obj["params"] = params;
+  doc.setObject(obj);
   return doc;
 }
 
@@ -111,7 +134,8 @@ int main(int argc, char* argv[])
 
   QMap< QString, std::function<QJsonDocument ()> > testCases
   {
-    {"get-wifi-status", test_getWiFiStatus}
+    {"get-wifi-status", test_getWiFiStatus},
+    {"wifi-connect", test_WiFiConnect}
   };
 
   parser.setApplicationDescription("Test BLE interface on RDKC xCam2");
