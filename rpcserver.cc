@@ -25,6 +25,7 @@
 
 extern "C" RpcService* AppSettings_Create();
 extern "C" RpcService* WiFiService_Create();
+extern "C" RpcService* NetService_Create();
 
 namespace
 {
@@ -77,7 +78,8 @@ services()
   std::vector< std::shared_ptr<RpcService> > services
   {
     std::shared_ptr<RpcService>(AppSettings_Create()),
-    std::shared_ptr<RpcService>(WiFiService_Create())
+    std::shared_ptr<RpcService>(WiFiService_Create()),
+    std::shared_ptr<RpcService>(NetService_Create())
   };
   return services;
 }

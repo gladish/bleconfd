@@ -524,28 +524,23 @@ GattClient::onDataChannelOut(
   XLOG_INFO("onDataChannelOut(id=%d, offset=%u, opcode=%d)",
     id, offset, opcode);
 
-  static int32_t const kBufferSize = 1024;
+  static int32_t const kBufferSize = 256;
   static uint8_t buff[kBufferSize];
 
   int n = 0;
 
   if (offset == 0)
   {
-    bool end_of_record = false;
-
     memset(buff, 0, sizeof(buff));
-    n = m_outgoing_queue.get_line((char *)buff, kBufferSize - 1, &end_of_record);
-    if (end_of_record)
-      buff[n] = kRecordDelimiter;
+    n = m_outgoing_queue.get_line((char *)buff, kBufferSize);
   }
   else
   {
     int bytesToWrite = 0;
-    while ((bytesToWrite < kBufferSize) && (buff[bytesToWrite] != kRecordDelimiter))
+    while ((bytesToWrite + offset) < kBufferSize && (buff[offset + bytesToWrite] != '\0'))
       bytesToWrite++;
-    bytesToWrite += 1;
 
-    n = bytesToWrite - offset;
+    n = bytesToWrite;
     XLOG_INFO("bytesToWrite:%d offset:%d n:%d", bytesToWrite, offset, n);
   }
 
@@ -555,6 +550,7 @@ GattClient::onDataChannelOut(
   else
     buff[0] = '\0';
 
+  // printf("write:%.*s\n", n, (char *) value);
   gatt_db_attribute_read_result(attr, id, 0, value, n);
 }
 
