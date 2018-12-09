@@ -282,6 +282,9 @@ BluetoothApplication::onReadInbox(QLowEnergyCharacteristic const& c, QByteArray 
       if (parseError.error != QJsonParseError::NoError)
       {
         log("failed to parse json:%s", qPrintable(parseError.errorString()));
+
+        QString temp(m_incoming_data);
+        log("%s", qPrintable(temp));
       }
       else
       {
