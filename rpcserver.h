@@ -12,7 +12,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//#ifndef __RPC_SERVER_H__
+//
+#ifndef __RPC_SERVER_H__
 #define __RPC_SERVER_H__
 
 #include <condition_variable>
