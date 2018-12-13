@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 #include "gattServer.h"
+#include "beacon.h"
 #include "../defs.h"
 #include "../rpclogger.h"
 #include "../util.h"
@@ -351,6 +352,8 @@ GattServer::init()
   ret = listen(m_listen_fd, 2);
   if (ret < 0)
     throw_errno(errno, "failed to listen on bluetooth socket");
+
+  startBeacon("XPI-SETUP");
 }
 
 std::shared_ptr<RpcConnectedClient>

@@ -25,6 +25,7 @@ ifneq ($(WITH_BLUEZ),)
   BLUEZ_LIBS+=-L$(BLUEZ_HOME)/src/.libs/ -lshared-mainloop -L$(BLUEZ_HOME)/lib/.libs -lbluetooth-internal
   SRCS+=gattServer.cc
   SRCS+=beacon.cc
+  SRCS+=bleclass.cc
 endif
 
 OBJS=$(patsubst %.cc, %.o, $(notdir $(SRCS)))
@@ -43,6 +44,9 @@ os_unix.o: $(HOSTAPD_HOME)/src/utils/os_unix.c
 	$(CC) $(CPPFLAGS) -c $< -o $@
 
 gattServer.o: bluez/gattServer.cc
+	$(CXX) $(CPPFLAGS) -c $< -o $@
+
+bleclass.o: bluez/bleclass.cc
 	$(CXX) $(CPPFLAGS) -c $< -o $@
 
 beacon.o: bluez/beacon.cc

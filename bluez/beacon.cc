@@ -435,6 +435,16 @@ startBeacon(std::string const& s)
   cmdUp(ctl, di.dev_id);
   cmdNoleadv(di.dev_id);
 
+  // TODO: hardcoded for now to
+  // [antman]: sudo hciconfig hci0 class 3a0430
+  // [antman]: sudo hciconfig hci0 class
+  // hci0:   Type: Primary  Bus: UART
+  //    BD Address: B8:27:EB:A0:DA:2C  ACL MTU: 1021:8  SCO MTU: 64:1
+  //    Class: 0x3a0430
+  //    Service Classes: Networking, Capturing, Object Transfer, Audio
+  //    Device Class: Audio/Video, Video Camera
+  system("hciconfig hci0 class 3a0430");
+
   std::string startUpCmd01(appSettings_get_ble_value("ble_init_cmd01"));
   hcitoolCmd(di.dev_id, parseArgs(startUpCmd01));
 
@@ -442,4 +452,5 @@ startBeacon(std::string const& s)
   hcitoolCmd(di.dev_id, parseArgs(startUpCmd02));
   cmdLeadv(di.dev_id);
   cmdName(di.dev_id, s.c_str());
+
 }
