@@ -69,6 +69,6 @@ must be step by step, otherwise it maybe cannot worked as expected.
 1. run `sudo ./bleconfd`  to startup server on RPI device.
 2. run `sudo hciconfig hci0 piscan ` or click top left bluetooth icon then click "Make discoverable" to make the BLE device discoverable on RPI device.
 3. use android 8.0 + phone paired "RPI-BLE*" (you can change the name in bleconfd.ini), you maybe need confirm pair request on RPI device.  **in the first time, the BLE name maybe not this, please wait some times or refresh devices.**
-4. install *app-debug.apk* and open it or use source code *bleconfd-example* run app on android phone.
+4. install *app-debug.apk* and open it or use source code *AndroidClientApp* run app on android phone.
 5. select "RPI-BLE*", then click "CONNECT" button
 

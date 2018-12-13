@@ -27,9 +27,46 @@ enum appSettings_Kind
   appSettingsKind_Double  = 5
 };
 
+
 int appSettings_init(char const* settings_file);
+
+/**
+ * delete value
+ * @param req the request include group and key
+ * @param res the response
+ */
+int appSettings_delete(cJSON const* req, cJSON** res);
 int appSettings_set(cJSON const* req, cJSON** res);
 int appSettings_get(cJSON const* req, cJSON** res);
+
+/**
+ * read all current keys and values
+ * @param req the request
+ * @param res the response
+ */
+int appSettings_get_all(cJSON const* req, cJSON** res);
+
+
+/**
+ * add group
+ * @param req the request
+ * @param res the response
+ */
+int appSettings_add_group(cJSON const* req, cJSON** res);
+
+/**
+ * modify group, if group name is nullptr, all origin values will be put in default group
+ * @param req the request include new group name
+ * @param res the response
+ */
+int appSettings_modify_group(cJSON const* req, cJSON** res);
+
+/**
+ * delete group by name, the name is required
+ * @param req the request include group name
+ * @param res the response
+ */
+int appSettings_delete_group(cJSON const* req, cJSON** res);
 
 /**
  * get ble values

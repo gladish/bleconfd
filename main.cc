@@ -302,10 +302,10 @@ namespace
           int ret = func(req, &rpc_response);
 
           XLOG_INFO("%s returned:%d", method->valuestring, ret);
+          cJSON_AddItemToObject(response_envelope, "code", cJSON_CreateNumber(ret));
           if (ret)
           {
-            // TODO:
-            // cJSON_AddItemToObject(response_envelope, "error", temp);
+            cJSON_AddItemToObject(response_envelope, "error", rpc_response);
           }
           else
           {
@@ -340,8 +340,13 @@ namespace
     {
       jsonRpc_insertFunction("wifi-connect", wpaControl_connectToNetwork);
       jsonRpc_insertFunction("wifi-get-status", wpaControl_getStatus);
+      jsonRpc_insertFunction("app-settings-get-all", appSettings_get_all);
       jsonRpc_insertFunction("app-settings-get", appSettings_get);
       jsonRpc_insertFunction("app-settings-set", appSettings_set);
+      jsonRpc_insertFunction("app-settings-delete", appSettings_delete);
+      jsonRpc_insertFunction("app-settings-group-add", appSettings_add_group);
+      jsonRpc_insertFunction("app-settings-group-modify", appSettings_modify_group);
+      jsonRpc_insertFunction("app-settings-group-delete", appSettings_delete_group);
     }
 
   private:

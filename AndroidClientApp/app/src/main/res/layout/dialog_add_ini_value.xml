@@ -4,26 +4,40 @@
     android:orientation="vertical">
 
     <EditText
-        android:id="@+id/wifi_ssid"
+        android:id="@+id/group_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginLeft="4dp"
         android:layout_marginTop="16dp"
         android:layout_marginRight="4dp"
         android:layout_marginBottom="4dp"
-        android:hint="SSID"
+        android:hint="Group name"
         android:inputType="text" />
 
     <EditText
-        android:id="@+id/wifi_password"
+        android:id="@+id/key"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginLeft="4dp"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="16dp"
         android:layout_marginRight="4dp"
-        android:layout_marginBottom="16dp"
-        android:hint="password"
-        android:inputType="textPassword" />
+        android:layout_marginBottom="4dp"
+        android:hint="Key"
+        android:inputType="text" />
+
+    <EditText
+        android:id="@+id/value"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="4dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginRight="4dp"
+        android:layout_marginBottom="4dp"
+        android:gravity="top|left"
+        android:hint="Value"
+        android:inputType="textMultiLine"
+        android:maxLines="10"
+        android:minLines="4" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -33,19 +47,19 @@
         android:padding="10dp">
 
         <Button
-            android:id="@+id/wifi_cancel"
+            android:id="@+id/cancel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="CANCEL" />
 
         <Button
-            android:id="@+id/wifi_connect"
+            android:id="@+id/ok"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginRight="10dp"
             android:layout_weight="1"
-            android:text="CONNECT" />
+            android:text="ADD" />
 
 
     </LinearLayout>

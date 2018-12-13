@@ -1,3 +1,12 @@
 <resources>
-    <string name="app_name">bleconfd-example</string>
+    <string name="app_name">BLECONFD App</string>
+
+    <string-array name="drawer_item_array">
+        <item>Home</item>
+        <item>Wifi Settings</item>
+        <item>INI file</item>
+    </string-array>
+
+    <string name="drawer_open">Open navigation drawer</string>
+    <string name="drawer_close">Close navigation drawer</string>
 </resources>
