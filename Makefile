@@ -6,7 +6,7 @@ CPPFLAGS+=-I$(CJSON_HOME)
 CPPFLAGS+=-I$(BLUEZ_HOME)
 CPPFLAGS+=$(shell pkg-config --cflags glib-2.0) -g
 LDFLAGS+=$(shell pkg-config --libs glib-2.0)
-LDFLAGS+=-pthread -L$(CJSON_HOME) -lcjson
+LDFLAGS+=-pthread -L$(CJSON_HOME) -lcjson -lcrypto
 
 WITH_BLUEZ=1
 
@@ -18,7 +18,8 @@ SRCS=\
   rpcserver.cc \
   appsettings.cc \
   wifiservice.cc \
-  netservice.cc
+  netservice.cc \
+  ecdh.cc
 
 ifneq ($(WITH_BLUEZ),)
 	CPPFLAGS+=-DWITH_BLUEZ
@@ -39,6 +40,9 @@ bleconfd: $(OBJS)
 
 wpa_ctrl.o: $(HOSTAPD_HOME)/src/common/wpa_ctrl.c
 	$(CC) $(CPPFLAGS) -c $< -o $@
+
+ecdh.o: ecdh.cc
+	$(CXX) $(CPPFLAGS) -c $< -o $@
 
 os_unix.o: $(HOSTAPD_HOME)/src/utils/os_unix.c
 	$(CC) $(CPPFLAGS) -c $< -o $@
