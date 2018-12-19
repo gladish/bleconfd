@@ -1,17 +1,69 @@
-### Goal
+ 
 
-The goal of the `bleconfd` service is to communicate between a mobile app and an embedded device (Raspberry Pi 3 for our testing) over Bluetooth.  Messages sent will be in JSON format, using JSON RPC, between the mobile device and the "server" (rPi).
+### About
 
-Messages will be small and split into frames.  The server will have an "inbox" where messages are added, and an "outbox", where replies can be placed asynchronously.
+
+`bleconfd` is a JSON/RPC based configuration management system that uses BLE as a transport. The intent is to use this application to do out-of-box system setup and post setup diagnostics. 
 
 ### Architecture
 
+`bleconfd` at it's core is a JSON/RPC server with pluggable services and transports. The native transport suppuorted is GATT over BLE. The server supports the Device Information Service and a proprietary JSON/RPC service. The Device Infomormation Service can be found in the GATT profile specs here:
 
-### Target
+https://www.bluetooth.com/specifications/gatt
 
-The initial target for the server is a Raspberry Pi running Raspbian.  We want to target the rPi 3 because it has BLE built in.  We will be using BlueZ for the main Bluetooth functionality, including the GATT server.
 
-* GLib  2.38.2
+The setup service defines two GATT characteristics (service uuid -- 503553ca-eb90-11e8-ac5b-bb7e434023e8)
+1. Inbox ("510c87c8-eb90-11e8-b3dc-17292c2ecc2d")
+1. EPoll ("5140f882-eb90-11e8-a835-13d2bd922d3f")
+
+
+After making a GATT connection, the client sends JSON/RPC style requests by writing to the Inbox. The request must be terminated with an ASCII Record Separator character, which is 30 in decimal.
+
+
+https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/ASCII-Table-wide.svg/875px-ASCII-Table-wide.svg.png
+
+The requests are processed asynchronously. The server replies to the client by making the JSON/RPC response available via reading from the Inbox. The design is similar to using a streaming socket where the client reads and writes streams of data on the same connection. The server also periodically notifies on the EPoll characteristic when there is pending data to be read from the Inbox. The server will send a notify on EPoll with an integer indicating the number of pending bytes to be read. This should be look familiar to developers who have used read(2), write(2), and select(2). The client can read as many bytes as desired but should keep reading until it sees an ASCII Record Separator character in the data. The client can the parse the bytes that have been read (excluding the Record Separator) as plain ASCII/JSON.
+
+### JSON/RPC Usage
+
+The server always expects JSON/RPC request. The format should be very familiar to a regular user of JSON/RPC. A sample request to retrieve the WiFi status looks like:
+
+```
+{ "jsonrpc": "2.0", "method": "wifi-get-status", "id": 1234 }
+```
+
+Internally, the server expects to see method names separated by dashes. The first token is the RPC Service. In this case, the service name is "wifi". This should not be confused with a Bluetooth Service. The RPC Service is just a collection of functionally related methods grouped together.
+
+
+
+The requests always use named parameters. 
+
+
+https://www.jsonrpc.org/specification
+
+
+
+### Implementation Details
+
+This code was originally developed on Raspberry Pi running Raspian using BlueZ with HCI and c++ 11. The code is strucuted in such a way that it should be easy to provide additional transports like TCP, other BLE APIs, etc. More importantly, the code is structured such that additional RPC functionality can be compiled into the application. This is to allow for more JSON/RPC methods to be supported without having to know much about BLE.
+
+#### JSON/RPC Method Name Mapping
+
+The JSON/RPC method names are token separated by dashes. I.e `net-get-interfaces`. The structure always follows the same convention. The JSON/RPC method name is constructed by concatenating the RPC Service name, a dash, and the RPC method name. Although there is nothing technically requiring this, it keeps a consistent naming convention by placing the noun followed by the verb, which is a pretty common style on OO programming.
+
+Developers extending the application with new RPC services should follow the same naming convetions. 
+
+
+```
+class WiFiSerice
+{
+public:
+   cJSON* getStatus(cJSON* const req); // wifi-get-status
+   cJSON* connect(cJSON* const req); // wifi-connect
+   cJSON* scan(cJSON* const req); // wifi-scan
+}
+```
+
 * BlueZ 5.45
 
 ### BUILD
@@ -24,24 +76,3 @@ export CJSON_HOME=/home/pi/work/cJSON
 ```
 
 2. `make`
-
-
-### Demos
-
-These are a couple simple demos we hope to build out in the short term:
-
-#### Demo 1
-
-The initial demo will just be a simple service for getting and setting key value pairs via Glib.  We will build:
-
-* A simple service on the server that can accept messages to get / set values based on a give key
- * The set values will write to an ini file via Glib
-* A simple mobile app that we can connect to the server via bluetooth to view and set the individual key values
-
-#### Demo 2
-
-The next demo, after demo 1 is complete, will involve setting wifi settings on the Raspberry Pi through the mobile app.  We will be able to enter a mobile network name and an WPA2 password on the mobile app, and this data will be sent over Bluetooth to the Raspberry Pi.  The Raspberry Pi will accept the message, configure it's wifi settings accordingly, and will connect to the given mobile network.
-
-### Complete version
-
-The complete app will eventually have mobile and command line test clients for many different data requests.  We will also build wiki style documentation for request, response, and the notification pieces of the JSON RPC protocol.
