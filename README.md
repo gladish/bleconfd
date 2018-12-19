@@ -47,11 +47,10 @@ https://www.jsonrpc.org/specification
 
 
 
-### Target
+### Implementation Details
 
-The initial target for the server is a Raspberry Pi running Raspbian.  We want to target the rPi 3 because it has BLE built in.  We will be using BlueZ for the main Bluetooth functionality, including the GATT server.
+This code was originally developed on Raspberry Pi running Raspian using BlueZ with HCI and c++ 11. The code is strucuted in such a way that it should be easy to provide additional transports like TCP, other BLE APIs, etc. More importantly, the code is structured such that additional RPC functionality can be compiled into the application. This is to allow for more JSON/RPC methods to be supported without having to know much about BLE.
 
-* GLib  2.38.2
 * BlueZ 5.45
 
 ### BUILD
