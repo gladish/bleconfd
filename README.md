@@ -49,7 +49,7 @@ This code was originally developed on Raspberry Pi running Raspian using BlueZ w
 
 #### JSON/RPC Method Name Mapping
 
-The JSON/RPC method names are token separated by dashes. I.e `net-get-interfaces`. The structure always follows the same convention. The JSON/RPC method name is constructed by concatenating the RPC Service name, a dash, and the RPC method name. Although there is nothing technically requiring this, it keeps a consistent naming convention by placing the name followed by the verb.
+The JSON/RPC method names are token separated by dashes. I.e `net-get-interfaces`. The structure always follows the same convention. The JSON/RPC method name is constructed by concatenating the RPC Service name, a dash, and the RPC method name. Although there is nothing technically requiring this, it keeps a consistent naming convention by placing the noun followed by the verb, which is a pretty common style on OO programming.
 
 Developers extending the application with new RPC services should follow the same naming convetions. 
 
