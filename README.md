@@ -58,7 +58,9 @@ Developers extending the application with new RPC services should follow the sam
 class WiFiSerice
 {
 public:
-   Response getStatus(Request req); // wifi-get-status
+   cJSON* getStatus(cJSON* const req); // wifi-get-status
+   cJSON* connect(cJSON* const req); // wifi-connect
+   cJSON* scan(cJSON* const req); // wifi-scan
 }
 ```
 
