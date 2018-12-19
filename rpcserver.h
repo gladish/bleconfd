@@ -70,6 +70,7 @@ protected:
   // helpers
   cJSON* makeError(int code, char const* format, ...) __attribute__((format (printf, 3, 4)));
   cJSON* notImplemented(char const* methodName);
+  cJSON* getParam(cJSON const* req, char const* s) const;
 
 private:
   RpcMethodMap  m_methods;
@@ -93,6 +94,23 @@ class RpcServer
 public:
   RpcServer(std::string const& configFile);
   ~RpcServer();
+
+private:
+  class IntrospectionService : public BasicRpcService
+  {
+  public:
+    IntrospectionService(RpcServer* parent);
+    virtual ~IntrospectionService();
+    virtual void init(std::string const& configFile,
+      RpcNotificationFunction const& callback) override;
+  private:
+    cJSON* listServices(cJSON const* req);
+    cJSON* listMethods(cJSON const* req);
+  private:
+    RpcServer* m_server;
+  };
+
+  friend class IntrospectionService;
 
 public:
   void setClient(std::shared_ptr<RpcConnectedClient> const& tport);

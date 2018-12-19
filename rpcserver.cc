@@ -44,8 +44,21 @@ namespace
 
   struct RpcMethodInfo
   {
+    RpcMethodInfo() { }
+    RpcMethodInfo(std::string const& service, std::string const& method)
+      : ServiceName(service)
+      , MethodName(method) { }
     std::string ServiceName;
     std::string MethodName;
+
+    std::string toString() const
+    {
+      std::stringstream buff;
+      buff << ServiceName;
+      buff << '-';
+      buff << MethodName;
+      return buff.str();
+    }
   };
 
   RpcMethodInfo
@@ -124,6 +137,28 @@ BasicRpcService::registerMethod(std::string const& name, RpcMethod const& method
 }
 
 cJSON*
+BasicRpcService::getParam(cJSON const* req, char const*s ) const
+{
+  if (!req)
+  {
+    XLOG_WARN("null req when fetching param");
+    return nullptr;
+  }
+
+  if (!s)
+  {
+    XLOG_WARN("null name when fetching param");
+    return nullptr;
+  }
+
+  cJSON* param = nullptr;
+  cJSON const* params = cJSON_GetObjectItem(req, "params");
+  if (params)
+    param = cJSON_GetObjectItem(params, s);
+  return param;
+}
+
+cJSON*
 BasicRpcService::makeError(int code, char const* format, ...)
 {
   va_list ap;
@@ -187,6 +222,9 @@ BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
 RpcServer::RpcServer(std::string const& configFile)
   : m_config_file(configFile)
 {
+  std::shared_ptr<RpcService> s(new IntrospectionService(this));
+  registerService(s);
+
   m_dispatch_thread.reset(new std::thread([this] { this->processIncomingQueue(); }));
 }
 
@@ -357,4 +395,52 @@ RpcServer::registerService(std::shared_ptr<RpcService> const& service)
     std::placeholders::_1);
   m_services.insert(std::make_pair(service->name(), service));
   service->init(m_config_file, callback);
+}
+
+RpcServer::IntrospectionService::IntrospectionService(RpcServer* parent)
+  : BasicRpcService("rpc")
+  , m_server(parent)
+{
+}
+
+RpcServer::IntrospectionService::~IntrospectionService()
+{
+}
+
+void
+RpcServer::IntrospectionService::init(std::string const& UNUSED_PARAM(configFile),
+  RpcNotificationFunction const& UNUSED_PARAM(callback))
+{
+  registerMethod("list-services", [this](cJSON const* req) -> cJSON* { return this->listServices(req); });
+  registerMethod("list-methods", [this](cJSON const* req) -> cJSON* { return this->listMethods(req); });
+}
+
+cJSON*
+RpcServer::IntrospectionService::listServices(cJSON const* UNUSED_PARAM(req))
+{
+  cJSON* res = cJSON_CreateObject();
+  cJSON* names = cJSON_AddArrayToObject(res, "services");
+  for (auto const& kv : m_server->m_services)
+  {
+    cJSON_AddItemToArray(names, cJSON_CreateString(kv.first.c_str()));
+  }
+  return res;
+}
+
+cJSON*
+RpcServer::IntrospectionService::listMethods(cJSON const* req)
+{
+  cJSON* res = cJSON_CreateObject();
+  cJSON* service = getParam(req, "service");
+  if (service)
+  {
+    cJSON* names = cJSON_AddArrayToObject(res, "methods");
+    auto itr = m_server->m_services.find(service->valuestring);
+    for (std::string const& s : itr->second->methodNames())
+    {
+      RpcMethodInfo methodInfo(service->valuestring, s);
+      cJSON_AddItemToArray(names, cJSON_CreateString(methodInfo.toString().c_str()));
+    }
+  }
+  return res;
 }
