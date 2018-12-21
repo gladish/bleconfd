@@ -406,6 +406,9 @@ BluetoothApplication::onCharacteristicChanged(QLowEnergyCharacteristic const& c,
   log("\tbytes:%u", n);
 
   // TODO: initiate read from inbox
+  // TODO: These can backup if there's a lot of data, which results in a bunch 
+  // of trailing reads when there's nothing to read.
+  // It's harmless, but not necessary
   QTimer::singleShot(1, [this] 
   {
     m_rpc_service->readCharacteristic(m_rpc_inbox);

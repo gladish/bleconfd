@@ -70,6 +70,17 @@ QJsonDocument test_getWiFiStatus()
   return doc;
 }
 
+QJsonDocument test_WiFiScan()
+{
+  QJsonDocument doc;
+  QJsonObject obj;
+  obj["jsonrpc"] = "2.0";
+  obj["method"] = "wifi-scan";
+  obj["id"] = 1;
+  doc.setObject(obj);
+  return doc;
+}
+
 QJsonDocument test_getNetworkInterfaces()
 {
   QJsonDocument doc;
@@ -161,6 +172,7 @@ int main(int argc, char* argv[])
   {
     {"get-wifi-status", test_getWiFiStatus},
     {"wifi-connect", test_WiFiConnect},
+    {"wifi-scan", test_WiFiScan},
     {"net-get-interfaces", test_getNetworkInterfaces}
   };
 
