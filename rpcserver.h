@@ -60,12 +60,14 @@ public:
   virtual std::string name() const override;
   virtual std::vector<std::string> methodNames() const override;
   virtual cJSON* invokeMethod(std::string const& name, cJSON const* req) override;
+  virtual void init(std::string const& configFile, RpcNotificationFunction const& callback) override;
 
 protected:
   using RpcMethod = std::function<cJSON* (cJSON const* req)>;
   using RpcMethodMap = std::map< std::string, RpcMethod >;
 
   void registerMethod(std::string const& name, RpcMethod const& method);
+  void notifyAndDelete(cJSON* json);
 
   // helpers
   cJSON* makeError(int code, char const* format, ...) __attribute__((format (printf, 3, 4)));
@@ -75,6 +77,7 @@ protected:
 private:
   RpcMethodMap  m_methods;
   std::string   m_name;
+  RpcNotificationFunction m_notify;
 };
 
 class RpcListener

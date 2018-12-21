@@ -15,6 +15,7 @@
 //
 #include "jsonRpc.h"
 #include "rpclogger.h"
+#include "defs.h"
 
 #include <iomanip>
 #include <map>
@@ -32,8 +33,8 @@
 typedef std::map< std::string, jsonRpcFunction > jsonRpcFunctionMap;
 static jsonRpcFunctionMap jsonRpcFunctions;
 
-int
-jsonRpc_makeError(cJSON** result, int code, char const* fmt, ...)
+cJSON*
+JsonRpc::makeError(int code, char const* fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -47,13 +48,13 @@ jsonRpc_makeError(cJSON** result, int code, char const* fmt, ...)
   va_start(ap, fmt);
   n = vsnprintf(buff, n + 1, fmt, ap);
 
-  *result = cJSON_CreateObject();
-  cJSON_AddItemToObject(*result, "code", cJSON_CreateNumber(code));
-  cJSON_AddItemToObject(*result, "message", cJSON_CreateString(buff));
+  cJSON* result = cJSON_CreateObject();
+  cJSON_AddItemToObject(result, "code", cJSON_CreateNumber(code));
+  cJSON_AddItemToObject(result, "message", cJSON_CreateString(buff));
 
   delete [] buff;
 
-  return code;
+  return result;
 }
 
 int 
@@ -110,13 +111,7 @@ jsonRpc_insertFunction(char const* name, jsonRpcFunction func)
 }
 
 int
-jsonRpc_getInt(cJSON const* argv, int idx)
-{
-  return jsonRpc_getn(argv, idx)->valueint;
-}
-
-int
-jsonRpc_getInt(cJSON const* req, char const* name, bool required)
+JsonRpc::getInt(cJSON const* req, char const* name, bool required)
 {
   cJSON* item = cJSON_GetObjectItem(req, name);
   if (!item && required)
@@ -132,9 +127,9 @@ jsonRpc_getInt(cJSON const* req, char const* name, bool required)
 }
 
 char const*
-jsonRpc_getString(cJSON const* req, char const* name, bool required)
+JsonRpc::getString(cJSON const* req, char const* name, bool required)
 {
-  char* s = NULL;
+  char* s = nullptr;
 
   cJSON* item = cJSON_GetObjectItem(req, name);
 
@@ -147,7 +142,9 @@ jsonRpc_getString(cJSON const* req, char const* name, bool required)
     throw std::runtime_error(buff.str());
   }
 
-  s = item->valuestring;
+  if (item)
+    s = item->valuestring;
+
   if (!s || (strcmp(s, "<null>") == 0))
     s = NULL;
 
@@ -382,6 +379,7 @@ jsonRpc_binaryDecode(char const* s, std::vector<uint8_t>& decoded)
   return 0;
 }
 
+#if 0
 int
 jsonRpc_resultInt(int ret, int& n, cJSON** result)
 {
@@ -391,6 +389,7 @@ jsonRpc_resultInt(int ret, int& n, cJSON** result)
     ret = jsonRpc_makeError(result, ret, "failed");
   return ret;
 }
+#endif
 
 void
 jsonRpc_ok(cJSON** result)
@@ -398,6 +397,7 @@ jsonRpc_ok(cJSON** result)
   jsonRpc_makeResult(result, cJSON_CreateString("ok"));
 }
 
+#if 0
 int
 jsonRpc_result(int ret, cJSON** result)
 {
@@ -407,6 +407,7 @@ jsonRpc_result(int ret, cJSON** result)
     jsonRpc_makeError(result, ret, "failed");
   return ret;
 }
+#endif
 
 #if 0
 jsonRpcStringBuffer::jsonRpcStringBuffer()
@@ -431,6 +432,7 @@ jsonRpc_resultString(int ret, jsonRpcStringBuffer& buff, cJSON** result)
 }
 #endif
 
+#if 0
 int
 jsonRpc_resultBool(int ret, unsigned char& b, cJSON** result)
 {
@@ -441,7 +443,9 @@ jsonRpc_resultBool(int ret, unsigned char& b, cJSON** result)
     ret = jsonRpc_makeError(result, ret, "failed");
   return ret;
 }
+#endif
 
+#if 0
 int
 jsonRpc_resultUnsignedInt(int ret, unsigned int& n, cJSON** result)
 {
@@ -451,9 +455,15 @@ jsonRpc_resultUnsignedInt(int ret, unsigned int& n, cJSON** result)
     ret = jsonRpc_makeError(result, ret, "failed");
   return ret;
 }
+#endif
 
-int
-jsonRpc_notImplemented(cJSON** result)
+cJSON*
+JsonRpc::wrapResponse(cJSON* res, int reqId)
 {
-  return jsonRpc_makeError(result, ENOENT, "method not implementd");
+  cJSON* envelope = cJSON_CreateObject();
+  cJSON_AddStringToObject(envelope, "jsonrpc", kJsonRpcVersion);
+  if (reqId != -1)
+    cJSON_AddNumberToObject(envelope, "id", reqId);
+  cJSON_AddItemToObject(envelope, "result", res);
+  return envelope;
 }

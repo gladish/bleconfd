@@ -16,6 +16,7 @@
 #include "defs.h"
 #include "rpcserver.h"
 #include "rpclogger.h"
+#include "jsonRpc.h"
 
 #ifdef WITH_BLUEZ
 #include "bluez/gattServer.h"
@@ -32,14 +33,14 @@ namespace
   class JsonDeleter
   {
   public:
-    JsonDeleter(cJSON* json) : m_json(json) { }
+    JsonDeleter(cJSON*& json) : m_json(json) { }
     ~JsonDeleter()
     {
       if (m_json)
         cJSON_Delete(m_json);
     }
   private:
-    cJSON* m_json;
+    cJSON*& m_json;
   };
 
   struct RpcMethodInfo
@@ -73,6 +74,7 @@ namespace
     }
     return methodInfo;
   }
+
 }
 
 std::shared_ptr<RpcListener>
@@ -134,6 +136,24 @@ void
 BasicRpcService::registerMethod(std::string const& name, RpcMethod const& method)
 {
   m_methods.insert(std::make_pair(name, method));
+}
+
+void
+BasicRpcService::init(std::string const& UNUSED_PARAM(configFile), RpcNotificationFunction const& callback)
+{
+  m_notify = callback;
+}
+
+void
+BasicRpcService::notifyAndDelete(cJSON* json)
+{
+  if (!json)
+    return;
+
+  if (m_notify)
+    m_notify(json);
+
+  cJSON_Delete(json);
 }
 
 cJSON*
@@ -212,11 +232,21 @@ BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
   if (itr == m_methods.end())
   {
     XLOG_WARN("method %s-%s not found", m_name.c_str(), name.c_str());
-    // TODO: return error
-    return nullptr;
+    return JsonRpc::makeError(-1, "method %s-%s not found", m_name.c_str(), name.c_str());
   }
 
-  return itr->second(req);
+  cJSON* res = nullptr;
+  try
+  {
+    res = itr->second(req);
+  }
+  catch (std::exception const& err)
+  {
+    XLOG_ERROR("unhandled exception:%s", err.what());
+    return JsonRpc::makeError(-1, "unhandled exception:%s", err.what());
+  }
+
+  return res;
 }
 
 RpcServer::RpcServer(std::string const& configFile)
@@ -258,10 +288,13 @@ RpcServer::enqueueAsyncMessage(cJSON const* json)
 {
   if (!json)
     return;
-  {
-    char* s = cJSON_PrintUnformatted(json);
-    int n = static_cast<int>(strlen(s));
 
+  char* s = cJSON_PrintUnformatted(json);
+  int n = static_cast<int>(strlen(s));
+
+  XLOG_INFO("notify:%s", s);
+
+  {
     std::lock_guard<std::mutex> guard(m_mutex);
     if (m_client)
       m_client->enqueueForSend(s, n);
@@ -272,6 +305,9 @@ RpcServer::enqueueAsyncMessage(cJSON const* json)
 void
 RpcServer::onIncomingMessage(char const* s, int UNUSED_PARAM(n))
 {
+  if (!s || strlen(s) == 0)
+    return;
+
   XLOG_INFO("enqueue new incoming request");
   std::lock_guard<std::mutex> guard(m_mutex);
 
@@ -320,13 +356,6 @@ RpcServer::processRequest(cJSON const* req)
 {
   XLOG_INFO("processing new incoming request");
 
-  cJSON* envelope = nullptr;
-
-  envelope = cJSON_CreateObject();
-  cJSON_AddItemToObject(envelope, "jsonrpc", cJSON_CreateString(kJsonRpcVersion));
-  JsonDeleter envelopDeleter(envelope);
-
-
   cJSON* method = cJSON_GetObjectItem(req, "method");
   if (!method)
   {
@@ -341,7 +370,8 @@ RpcServer::processRequest(cJSON const* req)
     // TODO: respond with bad request
   }
 
-  cJSON_AddItemToObject(envelope, "id", cJSON_CreateNumber(id->valueint));
+  cJSON* envelope = nullptr;
+  JsonDeleter envelopeDeleter(envelope);
 
   try
   {
@@ -359,7 +389,7 @@ RpcServer::processRequest(cJSON const* req)
       cJSON* res = service->second->invokeMethod(methodInfo.MethodName, req);
       if (res)
       {
-        cJSON_AddItemToObject(envelope, "result", res);
+        envelope = JsonRpc::wrapResponse(res, id->valueint);
       }
       else
       {

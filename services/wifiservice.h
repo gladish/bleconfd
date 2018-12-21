@@ -29,6 +29,7 @@ public:
 private:
   cJSON* getStatus(cJSON const* req);
   cJSON* connect(cJSON const* req);
+  cJSON* scan(cJSON const* req);
 };
 
 #endif

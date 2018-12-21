@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include <iostream>
 #include <string>
 #include <queue>
 #include <pthread.h>
@@ -56,6 +57,14 @@ static cJSON* wpaControl_createError(int err);
 static void*  wpaControl_readNotificationSocket(void* argp);
 static void   wpaControl_reportEvent(char const* buff, int n);
 static RpcNotificationFunction responseHandler = nullptr;
+
+static cJSON* wpaControl_parseScanResult(std::string const& line);
+
+static bool
+ok(std::string const& s)
+{
+  return s == "OK";
+}
 
 int
 wpaControl_init(char const* control_socket, RpcNotificationFunction const& callback)
@@ -147,7 +156,7 @@ wpaControl_reportEvent(char const* buff, int n)
     return;
   }
 
-  XLOG_INFO("event:%s", buff);
+  XLOG_DEBUG("event:%s", buff);
 
   while (!pass && (kEventWhitelist[i] != NULL))
   {
@@ -245,10 +254,10 @@ wpaControl_readNotificationSocket(void* argp)
 }
 
 int
-wpaControl_command(char const* cmd, std::string& res)
+wpaControl_command(char const* cmd, std::string& res, int max = 4096)
 {
-  res.reserve(4096);
-  res.resize(4069);
+  res.reserve(max);
+  res.resize(max);
 
   size_t n = res.capacity();
 
@@ -435,9 +444,9 @@ wpaControl_connectToNetwork(cJSON const* req)
     return nullptr;
   }
 
-  char const* pass = jsonRpc_getString(creds, "pass", true);
-  char const* ssid = jsonRpc_getString(disco, "ssid", true);
-  int reqId = jsonRpc_getInt(req, "id", true);
+  char const* pass = JsonRpc::getString(creds, "pass", true);
+  char const* ssid = JsonRpc::getString(disco, "ssid", true);
+  int reqId = JsonRpc::getInt(req, "id", true);
 
   XLOG_INFO("%s(ssid=%s pwd=%s reqId=%d)", __FUNCTION__, ssid, pass, reqId);
 
@@ -476,10 +485,12 @@ wpaControl_getStatus(cJSON const* UNUSED_PARAM(req))
 cJSON*
 wpaControl_createResponse(std::string const& s)
 {
-  cJSON* res = cJSON_CreateObject();
+  cJSON* res = nullptr;
 
   if (!s.empty())
   {
+    res = cJSON_CreateObject();
+
     size_t begin = 0;
     while (true)
     {
@@ -510,11 +521,7 @@ wpaControl_createError(int err)
 {
   char buff[256] = {0};
   char* s = strerror_r(err, buff, sizeof(buff));
-
-  cJSON* temp = nullptr;
-  jsonRpc_makeError(&temp, err, "%s", s);
-
-  return temp;
+  return JsonRpc::makeError(err, s);
 }
 
 
@@ -529,14 +536,16 @@ WiFiService::~WiFiService()
 }
 
 void
-WiFiService::init(std::string const& UNUSED_PARAM(configFile),
-  RpcNotificationFunction const& callback)
+WiFiService::init(std::string const& configFile, RpcNotificationFunction const& callback)
 {
+  BasicRpcService::init(configFile, callback);
+
   char const* iface = appSettings_get_wifi_value("interface");
   wpaControl_init(iface, callback);
 
   registerMethod("get-status", [this](cJSON const* req) -> cJSON* { return this->getStatus(req); });
   registerMethod("connect", [this](cJSON const* req) -> cJSON* { return this->connect(req); });
+  registerMethod("scan", [this](cJSON const* req) -> cJSON* { return this->scan(req); });
 }
 
 cJSON*
@@ -549,4 +558,55 @@ cJSON*
 WiFiService::connect(cJSON const* req)
 {
   return wpaControl_connectToNetwork(req);
+}
+
+cJSON*
+WiFiService::scan(cJSON const* req)
+{
+  cJSON const* params = cJSON_GetObjectItem(req, "params");
+
+  int reqId = JsonRpc::getInt(req, "id", true);
+  char const* band = JsonRpc::getString(params, "band", false);
+
+  std::string buff;
+
+  int ret = wpaControl_command("SCAN", buff);
+  if (ret)
+  {
+    XLOG_WARN("error starting scan:%s", strerror(ret));
+  }
+  else
+  {
+    if (!ok(buff))
+      XLOG_WARN("error starting scan:%s", buff.c_str());
+  }
+
+  cJSON* start = cJSON_CreateObject();
+  cJSON_AddStringToObject(start, "status", "start-scan");
+  notifyAndDelete(JsonRpc::wrapResponse(start, reqId));
+
+  int id = 0;
+  while (true)
+  {
+    char cmd[16];
+    snprintf(cmd, sizeof(cmd), "BSS %d", id);
+
+    buff.resize(0);
+    ret = wpaControl_command(cmd,  buff, 8192);
+    if (!ret)
+    {
+      cJSON* bss = wpaControl_createResponse(buff);
+      if (bss)
+        notifyAndDelete(JsonRpc::wrapResponse(bss, reqId));
+    }
+
+    id++;
+
+    if (buff.size() == 0)
+      break;
+  }
+
+  cJSON* res = cJSON_CreateObject();
+  cJSON_AddStringToObject(res, "status", "scan-done");
+  return res;
 }

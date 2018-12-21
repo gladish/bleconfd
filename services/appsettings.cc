@@ -43,9 +43,10 @@ AppSettingsService::~AppSettingsService()
 }
 
 void
-AppSettingsService::init(std::string const& configFile,
-  RpcNotificationFunction const& UNUSED_PARAM(callback))
+AppSettingsService::init(std::string const& configFile, RpcNotificationFunction const& callback)
 {
+  BasicRpcService::init(configFile, callback);
+
   GKeyFileFlags flags = G_KEY_FILE_KEEP_COMMENTS;
 
   g_autoptr(GError) error = nullptr;

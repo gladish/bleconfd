@@ -56,12 +56,6 @@ bool jsonRpc_insertFunction(char const* name, jsonRpcFunction func);
 /**
  *
  */
-int jsonRpc_getInt(cJSON const* argv, int idx);
-int jsonRpc_getInt(cJSON const* argv, char const* name, bool required);
-
-/**
- *
- */
 char const* jsonRpc_getString(cJSON const* req, char const* name, bool required);
 
 /**
@@ -90,28 +84,14 @@ int jsonRpc_scanf(cJSON* obj, char const* fmt, ...);
 int jsonRpc_binaryEncode(uint8_t const* buff, size_t len, std::string& encoded);
 int jsonRpc_binaryDecode(char const* s, std::vector<uint8_t>& decoded);
 
-/**
- * Convenience function for returning errors in getters/setters
- * @param result [out] This will return a cJSON object in JSON-RPC format.
- * @param code The error code
- * @param fmt, The printf-style format.
- * @returns The code for easy use.
- */
-int jsonRpc_makeError(cJSON** result, int code, char const* fmt, ...)
-  __attribute__((format (printf, 3, 4)));
+class JsonRpc
+{
+public:
+  static cJSON* wrapResponse(cJSON* res, int reqId);
+  static cJSON* makeError(int code, char const* fmt, ...) __attribute__((format (printf, 2, 3)));
 
-int jsonRpc_makeResult(cJSON** result, cJSON* value);
-
-int jsonRpc_makeResultValue(cJSON** result, int code, char const* fmt, ...)
-  __attribute__((format (printf, 3, 4)));
-
-int jsonRpc_notImplemented(cJSON** result);
-
-
-int jsonRpc_result(int n, cJSON** result);
-int jsonRpc_resultBool(int n, unsigned char& b, cJSON** result);
-int jsonRpc_resultInt(int ret, int& n, cJSON** result);
-int jsonRpc_resultUnsignedInt(int ret, unsigned int& n, cJSON** result);
-void jsonRpc_ok(cJSON** result);
+  static int getInt(cJSON const* json, char const* name, bool required);
+  static char const* getString(cJSON const* json, char const* name, bool required);
+};
 
 #endif

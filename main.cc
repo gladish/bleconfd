@@ -33,8 +33,15 @@ run_test(void* argp)
 
   cJSON* req = cJSON_CreateObject();
   cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
+//  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
+  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-scan"));
+//  cJSON_AddItemToObject(req, "method", cJSON_CreateString("rpc-list-methods"));
   cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(1234));
+
+  cJSON* params = cJSON_CreateObject();
+  cJSON_AddItemToObject(params, "band", cJSON_CreateString("24"));
+//  cJSON_AddItemToObject(params, "service", cJSON_CreateString("wifi"));
+  cJSON_AddItemToObject(req, "params", params);
 
   char* s = cJSON_PrintUnformatted(req);
   int n = strlen(s);
@@ -80,6 +87,15 @@ int main(int argc, char* argv[])
   RpcServer server(configFile);
   for (auto const& service : services())
     server.registerService(service);
+
+  #if 0
+  pthread_t thread;
+  pthread_create(&thread, nullptr, &run_test, &server);
+  while (true)
+  {
+    sleep(1);
+  }
+  #endif
 
   while (true)
   {
