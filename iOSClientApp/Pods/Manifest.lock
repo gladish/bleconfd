@@ -1,0 +1,53 @@
+PODS:
+  - FGRoute (1.0.4)
+  - IQKeyboardManagerSwift (6.2.0)
+  - "NSObject+Rx (4.4.1)":
+    - RxSwift (~> 4.3)
+  - RxAtomic (4.4.0)
+  - RxBluetoothKit (5.1.4):
+    - RxSwift (~> 4.0)
+  - RxCocoa (4.4.0):
+    - RxSwift (~> 4.0)
+  - RxGesture (2.1.0):
+    - RxCocoa (~> 4.4.0)
+    - RxSwift (~> 4.4.0)
+  - RxSwift (4.4.0):
+    - RxAtomic (~> 4.4)
+  - SwiftyJSON (4.2.0)
+
+DEPENDENCIES:
+  - FGRoute
+  - IQKeyboardManagerSwift
+  - "NSObject+Rx"
+  - RxBluetoothKit
+  - RxCocoa
+  - RxGesture
+  - RxSwift
+  - SwiftyJSON
+
+SPEC REPOS:
+  https://github.com/cocoapods/specs.git:
+    - FGRoute
+    - IQKeyboardManagerSwift
+    - "NSObject+Rx"
+    - RxAtomic
+    - RxBluetoothKit
+    - RxCocoa
+    - RxGesture
+    - RxSwift
+    - SwiftyJSON
+
+SPEC CHECKSUMS:
+  FGRoute: 5a1da5e6702e672b07409904b0db50159c5711be
+  IQKeyboardManagerSwift: b07ccf9d8cafe993dcd6cb794eb4ba34611a0c4e
+  "NSObject+Rx": 9884a92f19b610795c431e10b4e601913b59c9e9
+  RxAtomic: eacf60db868c96bfd63320e28619fe29c179656f
+  RxBluetoothKit: d18f7beb5fd4d2b24659d57548e38d5d2fac885b
+  RxCocoa: df63ebf7b9a70d6b4eeea407ed5dd4efc8979749
+  RxGesture: 7f6dfb45dbde06e618c24442d38493e3144f2c95
+  RxSwift: 5976ecd04fc2fefd648827c23de5e11157faa973
+  SwiftyJSON: c4bcba26dd9ec7a027fc8eade48e2c911f229e96
+
+PODFILE CHECKSUM: 85e404c75bd456164d24ff8ad4af15ad8f6a9550
+
+COCOAPODS: 1.5.3

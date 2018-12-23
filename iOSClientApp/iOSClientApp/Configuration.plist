@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>rpcServiceUUID</key>
+	<string>503553ca-eb90-11e8-ac5b-bb7e434023e8</string>
+	<key>rpcInboxUUID</key>
+	<string>510c87c8-eb90-11e8-b3dc-17292c2ecc2d</string>
+	<key>ePollUUID</key>
+	<string>5140f882-eb90-11e8-a835-13d2bd922d3f</string>
+	<key>deviceAdvertisedUUID</key>
+	<string>00001812-0000-1000-8000-00805f9b34fb</string>
+	<key>settingsAPI</key>
+	<string>app-settings</string>
+	<key>wifiAPI</key>
+	<string>wifi</string>
+	<key>autoPair</key>
+	<true/>
+	<key>pollingDelay</key>
+	<integer>1000</integer>
+	<key>logIncludeTime</key>
+	<false/>
+	<key>logPrintConsole</key>
+	<true/>
+	<key>logLevel</key>
+	<integer>3</integer>
+</dict>
+</plist>

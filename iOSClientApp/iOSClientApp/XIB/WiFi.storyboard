@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="14460.31" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="Px7-Wq-A8U">
+    <device id="retina4_7" orientation="portrait">
+        <adaptation id="fullscreen"/>
+    </device>
+    <dependencies>
+        <deployment identifier="iOS"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="14460.20"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--Wi-Fi Settings-->
+        <scene sceneID="dhV-8C-83p">
+            <objects>
+                <viewController storyboardIdentifier="WiFiViewController" id="Px7-Wq-A8U" customClass="WiFiViewController" customModule="iOSClientApp" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="Q87-H6-KtR">
+                        <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="woN-WA-3fT" customClass="RoundedButton" customModule="UIComponents">
+                                <rect key="frame" x="16" y="84" width="100" height="44"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="44" id="4it-ZN-8pI"/>
+                                    <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="100" id="XIf-iW-fJO"/>
+                                </constraints>
+                                <fontDescription key="fontDescription" type="system" weight="medium" pointSize="15"/>
+                                <state key="normal" title="SET WIFI"/>
+                                <userDefinedRuntimeAttributes>
+                                    <userDefinedRuntimeAttribute type="number" keyPath="cornerRadius">
+                                        <real key="value" value="4"/>
+                                    </userDefinedRuntimeAttribute>
+                                </userDefinedRuntimeAttributes>
+                            </button>
+                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" verticalCompressionResistancePriority="1000" text="Logs" textAlignment="natural" lineBreakMode="tailTruncation" numberOfLines="0" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="pyp-VR-7Dq">
+                                <rect key="frame" x="16" y="163" width="37" height="20.5"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                <color key="textColor" white="0.33333333333333331" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                <nil key="highlightedColor"/>
+                            </label>
+                            <textView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" editable="NO" textAlignment="natural" translatesAutoresizingMaskIntoConstraints="NO" id="a4U-9w-bsK">
+                                <rect key="frame" x="16" y="208" width="343" height="435"/>
+                                <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                <color key="textColor" white="0.33333333333333331" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                <textInputTraits key="textInputTraits" autocapitalizationType="sentences"/>
+                            </textView>
+                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="Ppx-Q9-EKq" customClass="RoundedButton" customModule="UIComponents">
+                                <rect key="frame" x="131" y="84" width="120" height="44"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="120" id="JMw-YP-DAf"/>
+                                    <constraint firstAttribute="height" constant="44" id="SGV-BP-pep"/>
+                                </constraints>
+                                <fontDescription key="fontDescription" type="system" weight="medium" pointSize="15"/>
+                                <state key="normal" title="GET STATUS"/>
+                                <userDefinedRuntimeAttributes>
+                                    <userDefinedRuntimeAttribute type="number" keyPath="cornerRadius">
+                                        <real key="value" value="4"/>
+                                    </userDefinedRuntimeAttribute>
+                                </userDefinedRuntimeAttributes>
+                            </button>
+                        </subviews>
+                        <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                        <constraints>
+                            <constraint firstItem="woN-WA-3fT" firstAttribute="leading" secondItem="e6K-V1-dQg" secondAttribute="leading" constant="16" id="0qU-W0-E2L"/>
+                            <constraint firstItem="e6K-V1-dQg" firstAttribute="trailing" secondItem="a4U-9w-bsK" secondAttribute="trailing" constant="16" id="CKE-3L-54p"/>
+                            <constraint firstItem="Ppx-Q9-EKq" firstAttribute="leading" secondItem="woN-WA-3fT" secondAttribute="trailing" constant="15" id="HNw-cC-lSG"/>
+                            <constraint firstItem="Ppx-Q9-EKq" firstAttribute="bottom" secondItem="woN-WA-3fT" secondAttribute="bottom" id="HpC-JO-eVN"/>
+                            <constraint firstItem="a4U-9w-bsK" firstAttribute="leading" secondItem="pyp-VR-7Dq" secondAttribute="leading" id="KT5-X7-bjS"/>
+                            <constraint firstItem="pyp-VR-7Dq" firstAttribute="leading" secondItem="woN-WA-3fT" secondAttribute="leading" id="Y2S-4H-OLM"/>
+                            <constraint firstItem="woN-WA-3fT" firstAttribute="top" secondItem="e6K-V1-dQg" secondAttribute="top" constant="20" id="Yvq-qf-d2x"/>
+                            <constraint firstItem="a4U-9w-bsK" firstAttribute="top" secondItem="pyp-VR-7Dq" secondAttribute="bottom" constant="24.5" id="i2C-1g-Q5q"/>
+                            <constraint firstItem="pyp-VR-7Dq" firstAttribute="top" secondItem="woN-WA-3fT" secondAttribute="bottom" constant="35" id="q0P-ht-2Xr"/>
+                            <constraint firstItem="e6K-V1-dQg" firstAttribute="bottom" secondItem="a4U-9w-bsK" secondAttribute="bottom" constant="24" id="sgJ-mG-9FR"/>
+                        </constraints>
+                        <viewLayoutGuide key="safeArea" id="e6K-V1-dQg"/>
+                    </view>
+                    <navigationItem key="navigationItem" title="Wi-Fi Settings" id="Vo5-ZV-dtr"/>
+                    <simulatedNavigationBarMetrics key="simulatedTopBarMetrics" prompted="NO"/>
+                    <connections>
+                        <outlet property="logsTextView" destination="a4U-9w-bsK" id="ovN-zo-5hy"/>
+                        <outlet property="statusButton" destination="Ppx-Q9-EKq" id="H87-bG-3OK"/>
+                        <outlet property="wifiButton" destination="woN-WA-3fT" id="eAW-w0-nuH"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="zjV-Y5-SX9" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="296.80000000000001" y="1.3493253373313345"/>
+        </scene>
+        <!--Wi Fi Popover View Controller-->
+        <scene sceneID="b6F-6B-mMl">
+            <objects>
+                <viewController storyboardIdentifier="WiFiPopoverViewController" id="hXu-Na-Mj8" customClass="WiFiPopoverViewController" customModule="iOSClientApp" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="3ee-hx-fSP">
+                        <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="9l4-fc-0Ur">
+                                <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
+                                <color key="backgroundColor" white="0.0" alpha="0.40000000000000002" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                            </button>
+                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="xTK-C4-eNl" customClass="ShadowView" customModule="UIComponents">
+                                <rect key="frame" x="32.5" y="154" width="310" height="242"/>
+                                <subviews>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="SET RPI WIFI CONNECTION" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="gjz-Ng-VDd">
+                                        <rect key="frame" x="16" y="12" width="278" height="19.5"/>
+                                        <fontDescription key="fontDescription" type="system" weight="semibold" pointSize="16"/>
+                                        <nil key="textColor"/>
+                                        <nil key="highlightedColor"/>
+                                    </label>
+                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="ZZR-3q-bqJ" userLabel="sep">
+                                        <rect key="frame" x="0.0" y="44" width="310" height="0.5"/>
+                                        <color key="backgroundColor" white="0.66666666666666663" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                        <constraints>
+                                            <constraint firstAttribute="height" constant="0.5" id="SkV-vG-Ih2"/>
+                                        </constraints>
+                                    </view>
+                                    <textField opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="SSID" textAlignment="natural" adjustsFontSizeToFit="NO" minimumFontSize="14" translatesAutoresizingMaskIntoConstraints="NO" id="hQh-0U-U1f">
+                                        <rect key="frame" x="16" y="67" width="278" height="30"/>
+                                        <nil key="textColor"/>
+                                        <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                        <textInputTraits key="textInputTraits" autocorrectionType="no" spellCheckingType="no"/>
+                                    </textField>
+                                    <textField opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="password" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="vIA-xj-Zju">
+                                        <rect key="frame" x="16" y="123" width="278" height="30"/>
+                                        <nil key="textColor"/>
+                                        <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                        <textInputTraits key="textInputTraits" secureTextEntry="YES"/>
+                                    </textField>
+                                    <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="Tag-kD-kwm" customClass="RoundedButton" customModule="UIComponents">
+                                        <rect key="frame" x="16" y="178" width="135" height="44"/>
+                                        <constraints>
+                                            <constraint firstAttribute="height" constant="44" id="PNp-kc-SB9"/>
+                                            <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="100" id="tYN-kS-zBg"/>
+                                        </constraints>
+                                        <fontDescription key="fontDescription" type="system" weight="medium" pointSize="15"/>
+                                        <state key="normal" title="CANCEL"/>
+                                        <userDefinedRuntimeAttributes>
+                                            <userDefinedRuntimeAttribute type="number" keyPath="cornerRadius">
+                                                <real key="value" value="4"/>
+                                            </userDefinedRuntimeAttribute>
+                                        </userDefinedRuntimeAttributes>
+                                    </button>
+                                    <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="roundedRect" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="0DP-hn-5ia" customClass="RoundedButton" customModule="UIComponents">
+                                        <rect key="frame" x="159" y="178" width="135" height="44"/>
+                                        <constraints>
+                                            <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="100" id="rgW-3K-y2G"/>
+                                            <constraint firstAttribute="height" constant="44" id="v4O-2K-iUn"/>
+                                        </constraints>
+                                        <fontDescription key="fontDescription" type="system" weight="medium" pointSize="15"/>
+                                        <state key="normal" title="CONNECT"/>
+                                        <userDefinedRuntimeAttributes>
+                                            <userDefinedRuntimeAttribute type="number" keyPath="cornerRadius">
+                                                <real key="value" value="4"/>
+                                            </userDefinedRuntimeAttribute>
+                                        </userDefinedRuntimeAttributes>
+                                    </button>
+                                </subviews>
+                                <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                <constraints>
+                                    <constraint firstItem="Tag-kD-kwm" firstAttribute="bottom" secondItem="0DP-hn-5ia" secondAttribute="bottom" id="05O-TG-TcT"/>
+                                    <constraint firstAttribute="trailing" secondItem="gjz-Ng-VDd" secondAttribute="trailing" constant="16" id="0is-PS-J3c"/>
+                                    <constraint firstItem="vIA-xj-Zju" firstAttribute="leading" secondItem="hQh-0U-U1f" secondAttribute="leading" id="33e-Sk-aW8"/>
+                                    <constraint firstItem="ZZR-3q-bqJ" firstAttribute="leading" secondItem="xTK-C4-eNl" secondAttribute="leading" id="8ve-4C-S0J"/>
+                                    <constraint firstItem="vIA-xj-Zju" firstAttribute="top" secondItem="hQh-0U-U1f" secondAttribute="bottom" constant="26" id="9s6-RO-UfL"/>
+                                    <constraint firstAttribute="bottom" secondItem="0DP-hn-5ia" secondAttribute="bottom" constant="20" id="AEL-7N-FNB"/>
+                                    <constraint firstItem="hQh-0U-U1f" firstAttribute="leading" secondItem="gjz-Ng-VDd" secondAttribute="leading" id="AtD-1p-RwA"/>
+                                    <constraint firstItem="gjz-Ng-VDd" firstAttribute="leading" secondItem="xTK-C4-eNl" secondAttribute="leading" constant="16" id="AzG-LD-qU2"/>
+                                    <constraint firstItem="ZZR-3q-bqJ" firstAttribute="top" secondItem="xTK-C4-eNl" secondAttribute="top" constant="44" id="Dh9-zN-K6D"/>
+                                    <constraint firstAttribute="height" constant="242" id="I5e-yN-Qpl"/>
+                                    <constraint firstItem="Tag-kD-kwm" firstAttribute="width" secondItem="0DP-hn-5ia" secondAttribute="width" id="MQb-6e-SmJ"/>
+                                    <constraint firstAttribute="width" constant="310" id="SNZ-4z-RiH"/>
+                                    <constraint firstItem="Tag-kD-kwm" firstAttribute="leading" secondItem="vIA-xj-Zju" secondAttribute="leading" id="Slr-sc-GN8"/>
+                                    <constraint firstItem="0DP-hn-5ia" firstAttribute="leading" secondItem="Tag-kD-kwm" secondAttribute="trailing" constant="8" id="VX6-jG-biQ"/>
+                                    <constraint firstItem="0DP-hn-5ia" firstAttribute="trailing" secondItem="vIA-xj-Zju" secondAttribute="trailing" id="cb9-da-dhJ"/>
+                                    <constraint firstItem="hQh-0U-U1f" firstAttribute="top" secondItem="ZZR-3q-bqJ" secondAttribute="bottom" constant="22.5" id="kLw-tz-0Ko"/>
+                                    <constraint firstItem="vIA-xj-Zju" firstAttribute="trailing" secondItem="hQh-0U-U1f" secondAttribute="trailing" id="lgd-XR-HOL"/>
+                                    <constraint firstItem="gjz-Ng-VDd" firstAttribute="top" secondItem="xTK-C4-eNl" secondAttribute="top" constant="12" id="rLH-p7-mO8"/>
+                                    <constraint firstAttribute="trailing" secondItem="ZZR-3q-bqJ" secondAttribute="trailing" id="vkZ-Yi-8rb"/>
+                                    <constraint firstItem="hQh-0U-U1f" firstAttribute="trailing" secondItem="gjz-Ng-VDd" secondAttribute="trailing" id="z5l-On-HV1"/>
+                                </constraints>
+                                <userDefinedRuntimeAttributes>
+                                    <userDefinedRuntimeAttribute type="color" keyPath="shadowColor">
+                                        <color key="value" white="0.0" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                    </userDefinedRuntimeAttribute>
+                                    <userDefinedRuntimeAttribute type="number" keyPath="shadowOpacity">
+                                        <real key="value" value="0.40000000000000002"/>
+                                    </userDefinedRuntimeAttribute>
+                                    <userDefinedRuntimeAttribute type="size" keyPath="shadowOffset">
+                                        <size key="value" width="4" height="4"/>
+                                    </userDefinedRuntimeAttribute>
+                                    <userDefinedRuntimeAttribute type="number" keyPath="shadowRadius">
+                                        <real key="value" value="5"/>
+                                    </userDefinedRuntimeAttribute>
+                                </userDefinedRuntimeAttributes>
+                            </view>
+                        </subviews>
+                        <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                        <constraints>
+                            <constraint firstAttribute="trailing" secondItem="9l4-fc-0Ur" secondAttribute="trailing" id="Bny-zc-laN"/>
+                            <constraint firstItem="9l4-fc-0Ur" firstAttribute="leading" secondItem="3ee-hx-fSP" secondAttribute="leading" id="D55-Dv-gFi"/>
+                            <constraint firstItem="xTK-C4-eNl" firstAttribute="centerY" secondItem="PNl-7r-6sx" secondAttribute="centerY" multiplier="0.8" id="UsS-h8-uIp"/>
+                            <constraint firstItem="9l4-fc-0Ur" firstAttribute="bottom" secondItem="3ee-hx-fSP" secondAttribute="bottom" id="aFe-KJ-VnO"/>
+                            <constraint firstAttribute="top" secondItem="9l4-fc-0Ur" secondAttribute="top" id="l6C-0v-Yd7"/>
+                            <constraint firstItem="xTK-C4-eNl" firstAttribute="centerX" secondItem="PNl-7r-6sx" secondAttribute="centerX" id="mrh-9H-9bb"/>
+                        </constraints>
+                        <viewLayoutGuide key="safeArea" id="PNl-7r-6sx"/>
+                    </view>
+                    <connections>
+                        <outlet property="bgButton" destination="9l4-fc-0Ur" id="je3-rn-keD"/>
+                        <outlet property="cancelButton" destination="Tag-kD-kwm" id="eZN-E1-K9Y"/>
+                        <outlet property="passwordTextField" destination="vIA-xj-Zju" id="q7u-cU-4MM"/>
+                        <outlet property="sendButton" destination="0DP-hn-5ia" id="Szd-W0-4eI"/>
+                        <outlet property="ssidTextField" destination="hQh-0U-U1f" id="KnW-nb-z0j"/>
+                        <outlet property="titleLabel" destination="gjz-Ng-VDd" id="Rpx-5H-b9v"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="ACh-gz-3jy" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="1333.5999999999999" y="8.5457271364317844"/>
+        </scene>
+    </scenes>
+</document>
