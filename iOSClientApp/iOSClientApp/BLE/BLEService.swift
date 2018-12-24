@@ -77,6 +77,9 @@ private class BLEService: HasDisposeBag {
                 if value.contains(BLE.packetDelimiter) {
                     self?.parseInbox()
                 }
+                else {
+                    self?.readInbox()
+                }
             })
             .disposed(by: bag)
     }
@@ -116,7 +119,7 @@ private class BLEService: HasDisposeBag {
         guard let index = inboxData.firstIndex(of: BLE.packetDelimiter) else { return }
         let packet = inboxData[..<index]
         inboxData.removeFirst(index+1)
-        let packetData = Data(packet)
+        let packetData = Data(packet.filter({$0 != 0}))
         if let message = try? JSON(data: packetData) {
             inboxMessagesSubject.onNext(InboxPacket(json: message, originalString: String(data: packetData, encoding: .utf8) ?? ""))
             Logger.log(.debug, "Parsed inbox message:\n\(message)")
