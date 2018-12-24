@@ -412,7 +412,7 @@ GattClient::onDataChannelOut(
   XLOG_INFO("onDataChannelOut(id=%d, offset=%u, opcode=%d)",
     id, offset, opcode);
 
-  static int32_t const kBufferSize = 1024;
+  static int32_t const kBufferSize = 512;
   static uint8_t buff[kBufferSize];
 
   int n = 0;
