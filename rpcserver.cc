@@ -16,7 +16,7 @@
 #include "defs.h"
 #include "rpcserver.h"
 #include "rpclogger.h"
-#include "jsonRpc.h"
+#include "jsonrpc.h"
 
 #ifdef WITH_BLUEZ
 #include "bluez/gattServer.h"
@@ -154,58 +154,6 @@ BasicRpcService::notifyAndDelete(cJSON* json)
     m_notify(json);
 
   cJSON_Delete(json);
-}
-
-cJSON*
-BasicRpcService::getParam(cJSON const* req, char const*s ) const
-{
-  if (!req)
-  {
-    XLOG_WARN("null req when fetching param");
-    return nullptr;
-  }
-
-  if (!s)
-  {
-    XLOG_WARN("null name when fetching param");
-    return nullptr;
-  }
-
-  cJSON* param = nullptr;
-  cJSON const* params = cJSON_GetObjectItem(req, "params");
-  if (params)
-    param = cJSON_GetObjectItem(params, s);
-  return param;
-}
-
-cJSON*
-BasicRpcService::makeError(int code, char const* format, ...)
-{
-  va_list ap;
-  va_start(ap, format);
-
-  int n = vsnprintf(0, 0, format, ap);
-  va_end(ap);
-
-  char* buff = new char[n + 1 ];
-  buff[n] = '\0';
-
-  va_start(ap, format);
-  n = vsnprintf(buff, n + 1, format, ap);
-
-  cJSON* res = cJSON_CreateObject();
-  cJSON_AddItemToObject(res, "code", cJSON_CreateNumber(code));
-  cJSON_AddItemToObject(res, "message", cJSON_CreateString(buff));
-
-  delete [] buff;
-
-  return res;
-}
-
-cJSON*
-BasicRpcService::notImplemented(char const* methodName)
-{
-  return makeError(ENOENT, "method %s not found", methodName);
 }
 
 cJSON*
@@ -461,7 +409,7 @@ cJSON*
 RpcServer::IntrospectionService::listMethods(cJSON const* req)
 {
   cJSON* res = cJSON_CreateObject();
-  cJSON* service = getParam(req, "service");
+  cJSON const* service = JsonRpc::search(req, "/params/service", true);
   if (service)
   {
     cJSON* names = cJSON_AddArrayToObject(res, "methods");

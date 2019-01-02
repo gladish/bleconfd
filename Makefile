@@ -12,7 +12,7 @@ WITH_BLUEZ=1
 
 SRCS=\
   main.cc \
-  jsonRpc.cc \
+  jsonrpc.cc \
   rpclogger.cc \
   util.cc \
   rpcserver.cc \

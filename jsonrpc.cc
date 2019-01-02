@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#include "jsonRpc.h"
+#include "jsonrpc.h"
 #include "rpclogger.h"
 #include "defs.h"
 
@@ -30,8 +30,10 @@
 #include <string.h>
 #include <assert.h>
 
-typedef std::map< std::string, jsonRpcFunction > jsonRpcFunctionMap;
-static jsonRpcFunctionMap jsonRpcFunctions;
+namespace
+{
+
+}
 
 cJSON*
 JsonRpc::makeError(int code, char const* fmt, ...)
@@ -57,63 +59,54 @@ JsonRpc::makeError(int code, char const* fmt, ...)
   return result;
 }
 
-int 
-jsonRpc_makeResult(cJSON** result, cJSON* value)
+
+cJSON const*
+JsonRpc::search(cJSON const* json, char const* name, bool required)
 {
-  *result = value;
-  return 0;
-}
-
-int
-jsonRpc_makeResultValue(cJSON** result, int code, char const* fmt, ...)
-{
-  va_list ap;
-  va_start(ap, fmt);
-
-  int n = vsnprintf(0, 0, fmt, ap);
-  va_end(ap);
-
-  char* buff = new char[2048 + 1 ];
-  buff[n] = '\0';
-
-  va_start(ap, fmt);
-  n = vsnprintf(buff, n + 1, fmt, ap);
-
-  *result = cJSON_CreateObject();
-  cJSON_AddItemToObject(*result, "code", cJSON_CreateNumber(code));
-  cJSON_AddItemToObject(*result, "message", cJSON_CreateString(buff));
-
-  delete[] buff;
-
-  return code;
-}
-
-jsonRpcFunction
-jsonRpc_findFunction(char const* name)
-{
-  jsonRpcFunction func = NULL;
-  jsonRpcFunctionMap::const_iterator itr = jsonRpcFunctions.find(name);
-  if (itr != jsonRpcFunctions.end())
-    func = itr->second;
-  return func;
-}
-
-bool
-jsonRpc_insertFunction(char const* name, jsonRpcFunction func)
-{
-  std::pair< jsonRpcFunctionMap::iterator, bool > p =
-    jsonRpcFunctions.insert(std::pair<std::string, jsonRpcFunction>(name, func));
-  if (!p.second)
+  if (!json)
   {
-    XLOG_ERROR("%s already exists in jsonRpcFunctions registration map", name);
+    std::stringstream buff;
+    buff << "null json object when fetching field";
+    if (name)
+      buff << ":" << name;
+    throw std::runtime_error(buff.str());
   }
-  return p.second;
-}
 
-int
-JsonRpc::getInt(cJSON const* req, char const* name, bool required)
-{
-  cJSON* item = cJSON_GetObjectItem(req, name);
+  if (!name || strlen(name) == 0)
+  {
+    std::stringstream buff;
+    buff << "null name when fetching json field";
+    throw std::runtime_error(buff.str());
+  }
+
+  cJSON const* item = nullptr;
+
+  if (name[0] == '/')
+  {
+    char* str = strdup(name + 1);
+    char* saveptr = nullptr;
+    char* token = nullptr;
+
+    item = json;
+    while ((token = strtok_r(str, "/", &saveptr)) != nullptr)
+    {
+      if (token == nullptr)
+        break;
+
+      item = cJSON_GetObjectItem(item, token);
+      if (!item)
+        break;
+
+      str = nullptr;
+    }
+
+    free(str);
+  }
+  else
+  {
+    item = cJSON_GetObjectItem(json, name);
+  }
+
   if (!item && required)
   {
     std::stringstream buff;
@@ -123,7 +116,17 @@ JsonRpc::getInt(cJSON const* req, char const* name, bool required)
     throw std::runtime_error(buff.str());
   }
 
-  return item->valueint;
+  return item;
+}
+
+int
+JsonRpc::getInt(cJSON const* req, char const* name, bool required)
+{
+  int n = 0; 
+  cJSON const* item = JsonRpc::search(req, name, required);
+  if (item)
+    n = item->valueint;
+  return n;
 }
 
 char const*
@@ -151,6 +154,7 @@ JsonRpc::getString(cJSON const* req, char const* name, bool required)
   return s;
 }
 
+#if 0
 char const*
 jsonRpc_getString(cJSON* argv, int idx)
 {
@@ -171,36 +175,6 @@ jsonRpc_getBool(cJSON* argv, int idx)
     return false;
   XLOG_ERROR("expected JSON bool, but got: %d", t);
   assert(false);
-}
-
-cJSON *
-jsonRpc_getn(cJSON const* argv, int idx)
-{
-  int const n = cJSON_GetArraySize(argv);
-  if (n <= idx)
-  {
-    std::stringstream buff;
-    buff << "not enough args (";
-    buff << n << " <= " << idx;
-    buff << ")";
-    throw std::runtime_error(buff.str());
-  }
-
-  cJSON* arg = cJSON_GetArrayItem(argv, idx);
-  if (!arg)
-  {
-    std::stringstream buff;
-    buff << "null argument " << idx;
-    throw std::runtime_error(buff.str());
-  }
-  return arg;
-}
-
-unsigned long
-jsonRpc_getULong(cJSON* argv, int idx)
-{
-  double d = jsonRpc_getn(argv, idx)->valuedouble;
-  return static_cast<unsigned long>(d);
 }
 
 static bool
@@ -378,83 +352,6 @@ jsonRpc_binaryDecode(char const* s, std::vector<uint8_t>& decoded)
 
   return 0;
 }
-
-#if 0
-int
-jsonRpc_resultInt(int ret, int& n, cJSON** result)
-{
-  if (ret == RETURN_OK)
-    *result = cJSON_CreateNumber(n);
-  else
-    ret = jsonRpc_makeError(result, ret, "failed");
-  return ret;
-}
-#endif
-
-void
-jsonRpc_ok(cJSON** result)
-{
-  jsonRpc_makeResult(result, cJSON_CreateString("ok"));
-}
-
-#if 0
-int
-jsonRpc_result(int ret, cJSON** result)
-{
-  if (ret == RETURN_OK)
-    jsonRpc_ok(result);
-  else
-    jsonRpc_makeError(result, ret, "failed");
-  return ret;
-}
-#endif
-
-#if 0
-jsonRpcStringBuffer::jsonRpcStringBuffer()
-{
-  m_buff = new char[REMOTEAPI_STRING_MAX_SAFE];
-  memset(m_buff, 0, REMOTEAPI_STRING_MAX_SAFE);
-}
-
-jsonRpcStringBuffer::~jsonRpcStringBuffer()
-{
-  delete [] m_buff;
-}
-
-int
-jsonRpc_resultString(int ret, jsonRpcStringBuffer& buff, cJSON** result)
-{
-  if (ret == RETURN_OK)
-    *result = cJSON_CreateString(buff);
-  else
-    ret = jsonRpc_makeError(result, ret, "failed");
-  return ret;
-}
-#endif
-
-#if 0
-int
-jsonRpc_resultBool(int ret, unsigned char& b, cJSON** result)
-{
-  bool val = (b != 0 ? true : false);
-  if (ret == RETURN_OK)
-    *result = cJSON_CreateBool(val);
-  else
-    ret = jsonRpc_makeError(result, ret, "failed");
-  return ret;
-}
-#endif
-
-#if 0
-int
-jsonRpc_resultUnsignedInt(int ret, unsigned int& n, cJSON** result)
-{
-  if (ret == RETURN_OK)
-    *result = cJSON_CreateNumber(n);
-  else
-    ret = jsonRpc_makeError(result, ret, "failed");
-  return ret;
-}
 #endif
 
 cJSON*
@@ -466,4 +363,10 @@ JsonRpc::wrapResponse(cJSON* res, int reqId)
     cJSON_AddNumberToObject(envelope, "id", reqId);
   cJSON_AddItemToObject(envelope, "result", res);
   return envelope;
+}
+
+cJSON*
+JsonRpc::notImplemented(char const* methodName)
+{
+  return JsonRpc::makeError(ENOENT, "method %s not implemented", methodName);
 }

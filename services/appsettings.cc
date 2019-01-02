@@ -15,7 +15,7 @@
 //
 #include "appsettings.h"
 #include "../rpclogger.h"
-#include "../jsonRpc.h"
+#include "../jsonrpc.h"
 
 #include <glib.h>
 
@@ -69,13 +69,13 @@ AppSettingsService::init(std::string const& configFile, RpcNotificationFunction 
 cJSON*
 AppSettingsService::get(cJSON const* req)
 {
-  return notImplemented("get");
+  return JsonRpc::notImplemented("get");
 }
 
 cJSON*
 AppSettingsService::set(cJSON const* req)
 {
-  return notImplemented("set");
+  return JsonRpc::notImplemented("set");
 }
 
 // get string value from local ini file

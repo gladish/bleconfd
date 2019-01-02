@@ -18,7 +18,7 @@
 
 #include "../defs.h"
 #include "../rpclogger.h"
-#include "../jsonRpc.h"
+#include "../jsonrpc.h"
 #include "../util.h"
 
 #include <stdint.h>
@@ -423,32 +423,8 @@ wpaControl_connectToNetwork(cJSON const* req)
   XLOG_INFO("connect:%s", s);
   free(s);
 
-  cJSON const* params = cJSON_GetObjectItem(req, "params");
-  if (!params)
-  {
-    XLOG_WARN("missing params");
-    return nullptr;
-  }
-
-  cJSON* creds = cJSON_GetObjectItem(params, "cred");
-  if (!creds)
-  {
-    XLOG_WARN("params is missing 'creds' object");
-    return nullptr;
-  }
-
-  cJSON* disco = cJSON_GetObjectItem(params, "discovery");
-  if (!disco)
-  {
-    XLOG_WARN("params is missing 'discovery' object");
-    return nullptr;
-  }
-
-  char const* pass = JsonRpc::getString(creds, "pass", true);
-  char const* ssid = JsonRpc::getString(disco, "ssid", true);
-  int reqId = JsonRpc::getInt(req, "id", true);
-
-  XLOG_INFO("%s(ssid=%s pwd=%s reqId=%d)", __FUNCTION__, ssid, pass, reqId);
+  cJSON const* pass = JsonRpc::search(req, "/params/cred/pass", true);
+  cJSON const* ssid = JsonRpc::search(req, "/params/discovery/ssid", true);
 
   int networkId = -1;
   int ret = wpaControl_create_network(&networkId);
@@ -461,7 +437,7 @@ wpaControl_connectToNetwork(cJSON const* req)
 
   XLOG_INFO("new network created, index = %d", networkId);
 
-  wpaControl_connect_WPA2(networkId, ssid, pass);
+  wpaControl_connect_WPA2(networkId, ssid->valuestring, pass->valuestring);
   return nullptr;
 }
 

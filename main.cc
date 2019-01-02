@@ -15,6 +15,7 @@
 //
 #include "rpclogger.h"
 #include "rpcserver.h"
+#include "jsonrpc.h"
 
 #include <getopt.h>
 #include <string.h>
@@ -57,6 +58,35 @@ int main(int argc, char* argv[])
 {
   std::string configFile = "bleconfd.ini";
   RpcLogger::logger().setLevel(RpcLogLevel::Info);
+
+  // TEST
+  cJSON* obj = cJSON_CreateObject();
+  cJSON* sub_item1 = cJSON_CreateObject();
+  cJSON_AddStringToObject(sub_item1, "foo", "bar");
+  cJSON_AddStringToObject(sub_item1, "foo2", "bar2");
+  cJSON* sub_item2 = cJSON_CreateObject();
+  cJSON_AddNumberToObject(sub_item2, "num1", 1);
+  cJSON_AddNumberToObject(sub_item2, "num2", 2);
+  cJSON_AddItemToObject(sub_item1, "sub_item2", sub_item2);
+  cJSON_AddItemToObject(obj, "params", sub_item1);
+
+  char* s = cJSON_Print(obj);
+  printf("\n%s\n", s);
+  free(s);
+
+//  cJSON const* obj1 = JsonRpc::getItem(obj, "/item1/sub_item2/num2", false);
+  cJSON const* obj1 = JsonRpc::search(obj, "/params/foo", false);
+  if (obj1)
+  {
+    s = cJSON_Print(obj1);
+    printf("\n%s\n", s);
+    free(s);
+  }
+  else
+  {
+    printf("\tnull\n");
+  }
+  return 0;
 
   while (true)
   {
