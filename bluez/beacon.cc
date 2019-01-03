@@ -94,7 +94,7 @@ cmdNoleadv(int hdev)
   }
 
   memset(&advertise_cp, 0, sizeof(advertise_cp));
-  advertise_cp.enable = 0x01;
+  advertise_cp.enable = 0x00;
 
   memset(&req, 0, sizeof(req));
   req.ogf = OGF_LE_CTL;

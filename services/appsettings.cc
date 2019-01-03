@@ -18,8 +18,34 @@
 #include "../jsonrpc.h"
 
 #include <glib.h>
+#include <sstream>
 
-static GKeyFile* key_file = g_key_file_new();
+namespace
+{
+  GKeyFile* keyFile = g_key_file_new();
+
+  gchar*
+  configGetString(char const* section, char const* name, char const* defaultValue)
+  {
+    g_autoptr(GError) error = nullptr;
+    gchar* value = g_key_file_get_string(keyFile, section, name, &error);
+    if (!value)
+    {
+      if (!g_error_matches(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND) &&
+          !g_error_matches(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_GROUP_NOT_FOUND))
+      {
+        XLOG_WARN("g_key_file_get_string:%d", error->code);
+        std::stringstream buff;
+        buff << "Error invoking g_key_file_key_string. ";
+        buff << error->message;
+        throw std::runtime_error(buff.str());
+      }
+    }
+    if (!value)
+      value = g_strdup(defaultValue);
+    return value;
+  }
+}
 
 extern "C"
 {
@@ -31,7 +57,7 @@ extern "C"
 }
 
 AppSettingsService::AppSettingsService()
-  : BasicRpcService("app-settings")
+  : BasicRpcService("config")
 {
 }
 
@@ -49,7 +75,7 @@ AppSettingsService::init(cJSON const* conf, RpcNotificationFunction const& callb
   std::string configFile = JsonRpc::getString(conf, "/settings/db-file", true);
 
   g_autoptr(GError) error = nullptr;
-  if (!g_key_file_load_from_file(key_file, configFile.c_str(), flags, &error))
+  if (!g_key_file_load_from_file(keyFile, configFile.c_str(), flags, &error))
   {
     if (!g_error_matches(error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
     {
@@ -57,12 +83,13 @@ AppSettingsService::init(cJSON const* conf, RpcNotificationFunction const& callb
     }
     else
     {
-      key_file = g_key_file_new();
+      keyFile = g_key_file_new();
     }
   }
 
   registerMethod("get", [this](cJSON const* req) -> cJSON* { return this->get(req); });
   registerMethod("set", [this](cJSON const* req) -> cJSON* { return this->set(req); });
+  registerMethod("get-status", [this](cJSON const* req) -> cJSON* { return this->getStatus(req); });
 }
 
 cJSON*
@@ -77,21 +104,11 @@ AppSettingsService::set(cJSON const* req)
   return JsonRpc::notImplemented("set");
 }
 
-#if 0
-// get string value from local ini file
-char const*
-appSettings_get_string_value(char const* key, char const* section)
+cJSON*
+AppSettingsService::getStatus(cJSON const* req)
 {
-  g_autoptr(GError) error = nullptr;
-  gchar* value = g_key_file_get_string(key_file,
-                                       section,
-                                       key,
-                                       &error);
-  if (error)
-  {
-    XLOG_ERROR("appSettings_get_%s_value failed, key = %s, section = %s", section, key, section);
-    return nullptr;
-  }
-  return value;
+  g_autofree gchar* value = configGetString("system", "provision_status", "unprovisioned");
+  cJSON* res = cJSON_CreateObject();
+  cJSON_AddItemToObject(res, "provision-status", cJSON_CreateString(value));
+  return res;
 }
-#endif

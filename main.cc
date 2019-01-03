@@ -35,15 +35,22 @@ run_test(void* argp)
 
   cJSON* req = cJSON_CreateObject();
   cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
+  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(12345));
+
+  cJSON* params = cJSON_CreateObject();
+
+  #if 0
 //  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
   cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-scan"));
 //  cJSON_AddItemToObject(req, "method", cJSON_CreateString("rpc-list-methods"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(1234));
 
-  cJSON* params = cJSON_CreateObject();
   cJSON_AddItemToObject(params, "band", cJSON_CreateString("24"));
 //  cJSON_AddItemToObject(params, "service", cJSON_CreateString("wifi"));
+  #endif
+
+  cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get-status"));
   cJSON_AddItemToObject(req, "params", params);
+
 
   char* s = cJSON_PrintUnformatted(req);
   int n = strlen(s);

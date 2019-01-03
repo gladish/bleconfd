@@ -15,7 +15,7 @@
     },
 
     {
-      "name": "app-settings",
+      "name": "config",
       "settings":{
         "db-file": "bleconfd.ini"
       }
