@@ -515,8 +515,8 @@ WiFiService::init(cJSON const* conf, RpcNotificationFunction const& callback)
 {
   BasicRpcService::init(conf, callback);
 
-  cJSON const* iface = settings("interface");
-  wpaControl_init(iface->valuestring, callback);
+  char const* iface = JsonRpc::getString(conf, "/settings/interface", true);
+  wpaControl_init(iface, callback);
 
   registerMethod("get-status", [this](cJSON const* req) -> cJSON* { return this->getStatus(req); });
   registerMethod("connect", [this](cJSON const* req) -> cJSON* { return this->connect(req); });

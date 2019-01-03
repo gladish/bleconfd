@@ -120,9 +120,9 @@ JsonRpc::search(cJSON const* json, char const* name, bool required)
 }
 
 int
-JsonRpc::getInt(cJSON const* req, char const* name, bool required)
+JsonRpc::getInt(cJSON const* req, char const* name, bool required, int defaultValue)
 {
-  int n = 0; 
+  int n = defaultValue;
   cJSON const* item = JsonRpc::search(req, name, required);
   if (item)
     n = item->valueint;
@@ -130,11 +130,11 @@ JsonRpc::getInt(cJSON const* req, char const* name, bool required)
 }
 
 char const*
-JsonRpc::getString(cJSON const* req, char const* name, bool required)
+JsonRpc::getString(cJSON const* req, char const* name, bool required, char const* defaultValue)
 {
-  char* s = nullptr;
+  char const* s = defaultValue;
 
-  cJSON* item = cJSON_GetObjectItem(req, name);
+  cJSON const* item = JsonRpc::search(req, name, required);
 
   if (!item && required)
   {

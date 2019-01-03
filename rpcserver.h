@@ -68,13 +68,11 @@ protected:
 
   void registerMethod(std::string const& name, RpcMethod const& method);
   void notifyAndDelete(cJSON* json);
-  cJSON const* settings(char const* name) const;
 
 private:
   RpcMethodMap  m_methods;
   std::string   m_name;
   RpcNotificationFunction m_notify;
-  cJSON const*  m_config;
 };
 
 class RpcListener

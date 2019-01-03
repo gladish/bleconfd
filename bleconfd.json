@@ -9,9 +9,16 @@
   "services": [
     {
       "name": "wifi",
-      "settings":[
-        {"interface": "/var/run/wpa_supplicant/wlan0"}
-      ]
+      "settings": {
+        "interface": "/var/run/wpa_supplicant/wlan0"
+      }
+    },
+
+    {
+      "name": "app-settings",
+      "settings":{
+        "db-file": "bleconfd.ini"
+      }
     }
   ]
 }

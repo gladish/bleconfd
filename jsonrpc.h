@@ -25,9 +25,19 @@ public:
   static cJSON* makeError(int code, char const* fmt, ...) __attribute__((format (printf, 2, 3)));
   static cJSON* notImplemented(char const* methodName);
 
-  static int getInt(cJSON const* json, char const* name, bool required);
+  static int
+  getInt(
+    cJSON const*  json,
+    char const*   name,
+    bool          required = false,
+    int           defaultValue = 0);
 
-  static char const* getString(cJSON const* json, char const* name, bool required);
+  static char const*
+  getString(
+    cJSON const*  json,
+    char const*   name,
+    bool          required,
+    char const*   defaultValue = nullptr);
 
   static cJSON const* search(cJSON const* json, char const* name, bool required);
 };

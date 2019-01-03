@@ -20,9 +20,6 @@
 #include <glib.h>
 
 static GKeyFile* key_file = g_key_file_new();
-static char const* kDefaultGroup = "User";
-static char const* kBLE = "ble";
-static char const* kWifi = "wlan";
 
 extern "C"
 {
@@ -49,8 +46,7 @@ AppSettingsService::init(cJSON const* conf, RpcNotificationFunction const& callb
 
   GKeyFileFlags flags = G_KEY_FILE_KEEP_COMMENTS;
 
-  // TODO: get from json conf
-  std::string configFile = "bleconfd.ini";
+  std::string configFile = JsonRpc::getString(conf, "/settings/db-file", true);
 
   g_autoptr(GError) error = nullptr;
   if (!g_key_file_load_from_file(key_file, configFile.c_str(), flags, &error))

@@ -18,6 +18,7 @@
 #include "../defs.h"
 #include "../rpclogger.h"
 #include "../util.h"
+#include "../jsonrpc.h"
 
 #include <exception>
 #include <fstream>
@@ -325,7 +326,6 @@ GattServer::~GattServer()
 
 void
 GattServer::init(cJSON const* conf)
-// std::string const& name, std::string const& uuid)
 {
   m_listen_fd = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
   if (m_listen_fd < 0)
@@ -354,10 +354,9 @@ GattServer::init(cJSON const* conf)
   if (ret < 0)
     throw_errno(errno, "failed to listen on bluetooth socket");
 
-  cJSON const* id = cJSON_GetObjectItem(conf, "hci-device-id");
-  cJSON const* name = cJSON_GetObjectItem(conf, "ble-name");
-
-  startBeacon(name->valuestring, id->valueint);
+  startBeacon(
+      JsonRpc::getString(conf, "ble-name", false, "XPI-SETUP"),
+      JsonRpc::getInt(conf, "hci-device-id", false, 0));
 }
 
 std::shared_ptr<RpcConnectedClient>

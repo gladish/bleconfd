@@ -141,29 +141,7 @@ BasicRpcService::registerMethod(std::string const& name, RpcMethod const& method
 void
 BasicRpcService::init(cJSON const* config, RpcNotificationFunction const& callback)
 {
-  m_config = config;
   m_notify = callback;
-}
-
-cJSON const*
-BasicRpcService::settings(char const* name) const
-{
-  cJSON const* settings = nullptr;
-  if (m_config)
-    settings = cJSON_GetObjectItem(m_config, "settings");
-
-  if (settings)
-  {
-    for (int i = 0, n = cJSON_GetArraySize(settings); i < n; ++i)
-    {
-      cJSON* temp = cJSON_GetArrayItem(settings, i);
-      cJSON* value = cJSON_GetObjectItem(temp, name);
-      if (value)
-        return value;
-    }
-  }
-
-  return nullptr;
 }
 
 void
