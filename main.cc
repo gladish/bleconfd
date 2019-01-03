@@ -102,8 +102,11 @@ int main(int argc, char* argv[])
   {
     try
     {
+      std::string uuid = "";
+      std::string name = "XPI-SETUP";
+
       std::shared_ptr<RpcListener> listener(RpcListener::create());
-      listener->init();
+      listener->init(name, uuid);
 
       // blocks here until remote client makes BT connection
       std::shared_ptr<RpcConnectedClient> client = listener->accept();
@@ -118,6 +121,8 @@ int main(int argc, char* argv[])
       return -1;
     }
   }
+
+  XLOG_INFO("exiting");
 
   return 0;
 }

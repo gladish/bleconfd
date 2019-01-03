@@ -80,7 +80,7 @@ class RpcListener
 public:
   RpcListener() { }
   virtual ~RpcListener() { }
-  virtual void init() = 0;
+  virtual void init(std::string const& name, std::string const& uuid) = 0;
   virtual std::shared_ptr<RpcConnectedClient> accept() = 0;
 
 public:

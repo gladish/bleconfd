@@ -39,7 +39,6 @@
 using std::string;
 using std::vector;
 
-struct hci_dev_info di;
 
 
 /**
@@ -52,8 +51,7 @@ cmdDown(int ctl, int hdev)
 {
   if (ioctl(ctl, HCIDEVDOWN, hdev) < 0)
   {
-    XLOG_ERROR("Can't down device hci%d: %s (%d)", hdev, strerror(errno), errno);
-    exit(1);
+    XLOG_FATAL("Can't down device hci%d: %s (%d)", hdev, strerror(errno), errno);
   }
 }
 
@@ -69,8 +67,7 @@ cmdUp(int ctl, int hdev)
   {
     if (errno == EALREADY)
       return;
-    XLOG_ERROR("Can't init device hci%d: %s (%d)", hdev, strerror(errno), errno);
-    exit(1);
+    XLOG_FATAL("Can't init device hci%d: %s (%d)", hdev, strerror(errno), errno);
   }
 }
 
@@ -81,10 +78,12 @@ cmdUp(int ctl, int hdev)
 void
 cmdNoleadv(int hdev)
 {
-  struct hci_request rq;
+  hci_request req;
   le_set_advertise_enable_cp advertise_cp;
-  uint8_t status;
-  int dd, ret;
+
+  uint8_t status = 0;
+  int dd = 0;
+  int ret = 0;
 
   if (hdev < 0)
     hdev = hci_get_route(NULL);
@@ -92,34 +91,35 @@ cmdNoleadv(int hdev)
   dd = hci_open_dev(hdev);
   if (dd < 0)
   {
-    XLOG_ERROR("Could not open device");
-    exit(1);
+    XLOG_FATAL("Could not open device (%d)", hdev);
   }
 
   memset(&advertise_cp, 0, sizeof(advertise_cp));
+  advertise_cp.enable = 0x01;
 
-  memset(&rq, 0, sizeof(rq));
-  rq.ogf = OGF_LE_CTL;
-  rq.ocf = OCF_LE_SET_ADVERTISE_ENABLE;
-  rq.cparam = &advertise_cp;
-  rq.clen = LE_SET_ADVERTISE_ENABLE_CP_SIZE;
-  rq.rparam = &status;
-  rq.rlen = 1;
+  memset(&req, 0, sizeof(req));
+  req.ogf = OGF_LE_CTL;
+  req.ocf = OCF_LE_SET_ADVERTISE_ENABLE;
+  req.cparam = &advertise_cp;
+  req.clen = LE_SET_ADVERTISE_ENABLE_CP_SIZE;
+  req.rparam = &status;
+  req.rlen = 1;
 
-  ret = hci_send_req(dd, &rq, 1000);
+  ret = hci_send_req(dd, &req, 1000);
 
   hci_close_dev(dd);
 
   if (ret < 0)
   {
-    XLOG_ERROR("Can't set advertise mode on hci%d: %s (%d)",
-               hdev, strerror(errno), errno);
-    exit(1);
+    XLOG_FATAL("Can't set advertise mode on hci%d: %s (%d)", hdev,
+      strerror(errno), errno);
   }
 
+  // TODO: what exactly is "status"
   if (status)
   {
-    XLOG_INFO("LE set advertise enable on hci%d returned status %d", hdev, status);
+    XLOG_INFO("Disabling LE advertise on hci%d returned error status:%d.",
+      hdev, status);
   }
 }
 
@@ -142,8 +142,7 @@ cmdLeadv(int hdev)
   dd = hci_open_dev(hdev);
   if (dd < 0)
   {
-    XLOG_ERROR("Could not open device");
-    exit(1);
+    XLOG_FATAL("Could not open device (%d)", hdev);
   }
 
   memset(&adv_params_cp, 0, sizeof(adv_params_cp));
@@ -179,17 +178,14 @@ cmdLeadv(int hdev)
 
   if (ret < 0)
   {
-    XLOG_ERROR("Can't set advertise mode on hci%d: %s (%d)\n",
-               hdev, strerror(errno), errno);
-    exit(1);
+    XLOG_FATAL("Can't set advertise mode on hci%d: %s (%d)", hdev,
+      strerror(errno), errno);
   }
 
   if (status)
   {
-    XLOG_ERROR(
-        "LE set advertise enable on hci%d returned status %d\n",
+    XLOG_WARN("Enabling LE advertise on hci%d returned error status:%d",
         hdev, status);
-    exit(1);
   }
 }
 
@@ -233,21 +229,18 @@ cmdName(int hdev, char const* deviceName)
   int dd = hci_open_dev(hdev);
   if (dd < 0)
   {
-    XLOG_ERROR("Can't open device hci%d: %s (%d)", hdev, strerror(errno), errno);
-    exit(1);
+    XLOG_FATAL("Can't open device hci%d: %s (%d)", hdev, strerror(errno), errno);
   }
 
   if (hci_write_local_name(dd, deviceName, 2000) < 0)
   {
-    XLOG_ERROR("Can't change local name on hci%d: %s (%d)", hdev, strerror(errno), errno);
-    exit(1);
+    XLOG_FATAL("Can't change local name on hci%d: %s (%d)", hdev, strerror(errno), errno);
   }
 
   char name[249];
   if (hci_read_local_name(dd, sizeof(name), name, 1000) < 0)
   {
-    XLOG_ERROR("Can't read local name on hci%d: %s (%d)", hdev, strerror(errno), errno);
-    exit(1);
+    XLOG_FATAL("Can't read local name on hci%d: %s (%d)", hdev, strerror(errno), errno);
   }
 
   for (int i = 0; i < 248 && name[i]; i++)
@@ -321,8 +314,7 @@ hcitoolCmd(int dev_id, vector <string> const& args)
   ocf = strtol(args[1].c_str(), NULL, 16);
   if (errno == ERANGE || (ogf > 0x3f) || (ocf > 0x3ff))
   {
-    XLOG_ERROR("ogf must be in range (0x3f,0x3ff)");
-    exit(1);
+    XLOG_FATAL("ogf must be in range (0x3f,0x3ff)");
   }
 
   for (i = 2, len = 0; i < (int)args.size() && len < (int) sizeof(buf); i++, len++)
@@ -331,8 +323,7 @@ hcitoolCmd(int dev_id, vector <string> const& args)
   dd = hci_open_dev(dev_id);
   if (dd < 0)
   {
-    XLOG_ERROR("Device open failed");
-    exit(1);
+    XLOG_FATAL("Device open failed");
   }
 
   /* Setup filter */
@@ -341,8 +332,7 @@ hcitoolCmd(int dev_id, vector <string> const& args)
   hci_filter_all_events(&flt);
   if (setsockopt(dd, SOL_HCI, HCI_FILTER, &flt, sizeof(flt)) < 0)
   {
-    XLOG_ERROR("HCI filter setup failed");
-    exit(1);
+    XLOG_FATAL("HCI filter setup failed");
   }
 
   XLOG_INFO("< HCI Command: ogf 0x%02x, ocf 0x%04x, plen %d", ogf, ocf, len);
@@ -351,15 +341,13 @@ hcitoolCmd(int dev_id, vector <string> const& args)
 
   if (hci_send_cmd(dd, ogf, ocf, len, buf) < 0)
   {
-    XLOG_ERROR("Send failed");
-    exit(1);
+    XLOG_FATAL("Send failed");
   }
 
   len = read(dd, buf, sizeof(buf));
   if (len < 0)
   {
-    XLOG_ERROR("Read failed");
-    exit(1);
+    XLOG_FATAL("Read failed");
   }
 
   hdr = static_cast<hci_event_hdr*>((void*) (buf + 1));
@@ -378,7 +366,7 @@ hcitoolCmd(int dev_id, vector <string> const& args)
  * @param str the string args
  * @return  the vector args
  */
-std::vector <string>
+std::vector<string>
 parseArgs(string str)
 {
   string delimiter = " ";
@@ -402,38 +390,47 @@ parseArgs(string str)
  * @param s the expected device name
  */
 void
-startBeacon(std::string const& s)
+startBeacon(std::string const& name)
 {
 
   // updateDeviceName(s.c_str());
+  struct hci_dev_info deviceInfo;
+  uint8_t instanceId[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
 
   int ctl = 0;
   if ((ctl = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI)) < 0)
   {
-    XLOG_ERROR("Can't open HCI socket.");
-    exit(1);
+    XLOG_FATAL("Can't open HCI socket.");
   }
-  char const* dev_index = appSettings_get_ble_value("ble_device_id");
-  di.dev_id = atoi(dev_index);
 
-  if (ioctl(ctl, HCIGETDEVINFO, (void*) &di))
+  char const* dev_index = appSettings_get_ble_value("ble_device_id");
+  deviceInfo.dev_id = atoi(dev_index);
+
+  if (ioctl(ctl, HCIGETDEVINFO, (void*) &deviceInfo))
   {
-    XLOG_ERROR("Can't get device info");
-    exit(1);
+    XLOG_FATAL("Can't get device info");
   }
 
   bdaddr_t any = {0}; // BDADDR_ANY
-  if (hci_test_bit(HCI_RAW, &di.flags) &&
-      !bacmp(&di.bdaddr, &any))
+  if (hci_test_bit(HCI_RAW, &deviceInfo.flags) && !bacmp(&deviceInfo.bdaddr, &any))
   {
-    int dd = hci_open_dev(di.dev_id);
-    hci_read_bd_addr(dd, &di.bdaddr, 1000);
+    int dd = hci_open_dev(deviceInfo.dev_id);
+    hci_read_bd_addr(dd, &deviceInfo.bdaddr, 1000);
     hci_close_dev(dd);
   }
+  else
+  {
+    char addr[18];
+    ba2str(&deviceInfo.bdaddr, addr);
+    XLOG_INFO("BDADDR:%s", addr);
 
-  cmdDown(ctl, di.dev_id);
-  cmdUp(ctl, di.dev_id);
-  cmdNoleadv(di.dev_id);
+    for (int i = 0; i < 6; ++i)
+      instanceId[i] = deviceInfo.bdaddr.b[i];
+  }
+
+  cmdDown(ctl, deviceInfo.dev_id);
+  cmdUp(ctl, deviceInfo.dev_id);
+  cmdNoleadv(deviceInfo.dev_id);
 
   // TODO: hardcoded for now to
   // [antman]: sudo hciconfig hci0 class 3a0430
@@ -445,12 +442,25 @@ startBeacon(std::string const& s)
   //    Device Class: Audio/Video, Video Camera
   system("hciconfig hci0 class 3a0430");
 
-  std::string startUpCmd01(appSettings_get_ble_value("ble_init_cmd01"));
-  hcitoolCmd(di.dev_id, parseArgs(startUpCmd01));
+  // ble_init_cmd01=0x08 0x0008 1f 02 01 06 03 03 aa fe 17 16 aa fe 00 e7 36 c8 80 7b f4 60 cb 41 d1 45 00 00 00 00 00 01 00 00
+  char buff[128];
+  snprintf(buff, sizeof(buff), "0x08 0x0008 "
+    "1f 02 01 06 03 03 aa fe 17 16 aa fe 00 e7 36 c8 80 7b f4 60 cb 41 d1 45 %02x %02x %02x %02x %02x %02x 00 00",
+    instanceId[5],
+    instanceId[4],
+    instanceId[3],
+    instanceId[2],
+    instanceId[1],
+    instanceId[0]);
+ 
+  // std::string startUpCmd01(appSettings_get_ble_value("ble_init_cmd01"));
+  hcitoolCmd(deviceInfo.dev_id, parseArgs(buff));
 
+  #if 0
   std::string startUpCmd02(appSettings_get_ble_value("ble_init_cmd02"));
   hcitoolCmd(di.dev_id, parseArgs(startUpCmd02));
-  cmdLeadv(di.dev_id);
-  cmdName(di.dev_id, s.c_str());
+  #endif
 
+  cmdLeadv(deviceInfo.dev_id);
+  cmdName(deviceInfo.dev_id, name.c_str());
 }

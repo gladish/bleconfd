@@ -68,6 +68,7 @@ private:
 #define XLOG_WARN(FORMAT, ...) XLOG(RpcLogLevel::Warning, FORMAT, ##__VA_ARGS__)
 #define XLOG_ERROR(FORMAT, ...) XLOG(RpcLogLevel::Error, FORMAT, ##__VA_ARGS__)
 #define XLOG_CRITICAL(FORMAT, ...) XLOG(RpcLogLevel::Critical, FORMAT, ##__VA_ARGS__)
+#define XLOG_FATAL(FORMAT, ...) XLOG(RpcLogLevel::Critical, FORMAT, ##__VA_ARGS__)
 
 #define XLOG_JSON(LEVEL, JSON) \
   do { if (RpcLogger::logger().isLevelEnabled(LEVEL)) {\

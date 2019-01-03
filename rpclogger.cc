@@ -92,6 +92,12 @@ RpcLogger::log(RpcLogLevel level, char const* /*file*/, int /*line*/, char const
   }
 
   va_end(args);
+
+  if (level == RpcLogLevel::Critical)
+  {
+    this->log(RpcLogLevel::Error, nullptr, __LINE__, "critical error, exiting");
+    exit(1);
+  }
 }
 
 char const*

@@ -324,7 +324,7 @@ GattServer::~GattServer()
 }
 
 void
-GattServer::init()
+GattServer::init(std::string const& name, std::string const& uuid)
 {
   m_listen_fd = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
   if (m_listen_fd < 0)
@@ -353,7 +353,7 @@ GattServer::init()
   if (ret < 0)
     throw_errno(errno, "failed to listen on bluetooth socket");
 
-  startBeacon("XPI-SETUP");
+  startBeacon(name);
 }
 
 std::shared_ptr<RpcConnectedClient>
