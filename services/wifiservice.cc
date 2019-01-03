@@ -14,7 +14,6 @@
 // limitations under the License.
 //
 #include "wifiservice.h"
-#include "appsettings.h"
 
 #include "../defs.h"
 #include "../rpclogger.h"
@@ -512,12 +511,12 @@ WiFiService::~WiFiService()
 }
 
 void
-WiFiService::init(std::string const& configFile, RpcNotificationFunction const& callback)
+WiFiService::init(cJSON const* conf, RpcNotificationFunction const& callback)
 {
-  BasicRpcService::init(configFile, callback);
+  BasicRpcService::init(conf, callback);
 
-  char const* iface = appSettings_get_wifi_value("interface");
-  wpaControl_init(iface, callback);
+  cJSON const* iface = settings("interface");
+  wpaControl_init(iface->valuestring, callback);
 
   registerMethod("get-status", [this](cJSON const* req) -> cJSON* { return this->getStatus(req); });
   registerMethod("connect", [this](cJSON const* req) -> cJSON* { return this->connect(req); });

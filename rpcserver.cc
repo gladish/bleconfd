@@ -139,9 +139,31 @@ BasicRpcService::registerMethod(std::string const& name, RpcMethod const& method
 }
 
 void
-BasicRpcService::init(std::string const& UNUSED_PARAM(configFile), RpcNotificationFunction const& callback)
+BasicRpcService::init(cJSON const* config, RpcNotificationFunction const& callback)
 {
+  m_config = config;
   m_notify = callback;
+}
+
+cJSON const*
+BasicRpcService::settings(char const* name) const
+{
+  cJSON const* settings = nullptr;
+  if (m_config)
+    settings = cJSON_GetObjectItem(m_config, "settings");
+
+  if (settings)
+  {
+    for (int i = 0, n = cJSON_GetArraySize(settings); i < n; ++i)
+    {
+      cJSON* temp = cJSON_GetArrayItem(settings, i);
+      cJSON* value = cJSON_GetObjectItem(temp, name);
+      if (value)
+        return value;
+    }
+  }
+
+  return nullptr;
 }
 
 void
@@ -197,9 +219,13 @@ BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
   return res;
 }
 
-RpcServer::RpcServer(std::string const& configFile)
-  : m_config_file(configFile)
+RpcServer::RpcServer(cJSON const* config)
 {
+  if (config)
+    m_config = cJSON_Duplicate(config, true);
+  else
+    m_config = nullptr;
+
   std::shared_ptr<RpcService> s(new IntrospectionService(this));
   registerService(s);
 
@@ -208,6 +234,8 @@ RpcServer::RpcServer(std::string const& configFile)
 
 RpcServer::~RpcServer()
 {
+  if (m_config)
+    cJSON_Delete(m_config);
 }
 
 void
@@ -372,7 +400,29 @@ RpcServer::registerService(std::shared_ptr<RpcService> const& service)
   RpcNotificationFunction callback = std::bind(&RpcServer::enqueueAsyncMessage, this,
     std::placeholders::_1);
   m_services.insert(std::make_pair(service->name(), service));
-  service->init(m_config_file, callback);
+
+  // TODO: someone update JsonRpc::search to handle lists so we can do
+  // cJSON* conf = JsonRpc::search(m_conf, "/services/name/[@name='wifi']");
+  cJSON* conf = nullptr;
+  cJSON* serviceConfig = nullptr;
+  if (m_config)
+    serviceConfig = cJSON_GetObjectItem(m_config, "services");
+  
+  if (serviceConfig)
+  {
+    for (int i = 0, n = cJSON_GetArraySize(serviceConfig); i < n; ++i)
+    {
+      cJSON* temp = cJSON_GetArrayItem(serviceConfig, i);
+      cJSON* name = cJSON_GetObjectItem(temp, "name");
+      if (name && strcmp(name->valuestring, service->name().c_str()) == 0)
+      {
+        conf = temp;
+        break;
+      }
+    }
+  }
+
+  service->init(conf, callback);
 }
 
 RpcServer::IntrospectionService::IntrospectionService(RpcServer* parent)
@@ -386,7 +436,7 @@ RpcServer::IntrospectionService::~IntrospectionService()
 }
 
 void
-RpcServer::IntrospectionService::init(std::string const& UNUSED_PARAM(configFile),
+RpcServer::IntrospectionService::init(cJSON const* UNUSED_PARAM(config),
   RpcNotificationFunction const& UNUSED_PARAM(callback))
 {
   registerMethod("list-services", [this](cJSON const* req) -> cJSON* { return this->listServices(req); });

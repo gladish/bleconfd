@@ -34,7 +34,6 @@
 #include "../util.h"
 
 #include "beacon.h"
-#include "../services/appsettings.h"
 
 using std::string;
 using std::vector;
@@ -390,8 +389,9 @@ parseArgs(string str)
  * @param s the expected device name
  */
 void
-startBeacon(std::string const& name)
+startBeacon(std::string const& name, int deviceId)
 {
+  XLOG_INFO("starting beacon %s on hci%d", name.c_str(), deviceId);
 
   // updateDeviceName(s.c_str());
   struct hci_dev_info deviceInfo;
@@ -403,8 +403,7 @@ startBeacon(std::string const& name)
     XLOG_FATAL("Can't open HCI socket.");
   }
 
-  char const* dev_index = appSettings_get_ble_value("ble_device_id");
-  deviceInfo.dev_id = atoi(dev_index);
+  deviceInfo.dev_id = deviceId;
 
   if (ioctl(ctl, HCIGETDEVINFO, (void*) &deviceInfo))
   {
@@ -442,7 +441,6 @@ startBeacon(std::string const& name)
   //    Device Class: Audio/Video, Video Camera
   system("hciconfig hci0 class 3a0430");
 
-  // ble_init_cmd01=0x08 0x0008 1f 02 01 06 03 03 aa fe 17 16 aa fe 00 e7 36 c8 80 7b f4 60 cb 41 d1 45 00 00 00 00 00 01 00 00
   char buff[128];
   snprintf(buff, sizeof(buff), "0x08 0x0008 "
     "1f 02 01 06 03 03 aa fe 17 16 aa fe 00 e7 36 c8 80 7b f4 60 cb 41 d1 45 %02x %02x %02x %02x %02x %02x 00 00",
@@ -453,7 +451,6 @@ startBeacon(std::string const& name)
     instanceId[1],
     instanceId[0]);
  
-  // std::string startUpCmd01(appSettings_get_ble_value("ble_init_cmd01"));
   hcitoolCmd(deviceInfo.dev_id, parseArgs(buff));
 
   #if 0

@@ -43,11 +43,14 @@ AppSettingsService::~AppSettingsService()
 }
 
 void
-AppSettingsService::init(std::string const& configFile, RpcNotificationFunction const& callback)
+AppSettingsService::init(cJSON const* conf, RpcNotificationFunction const& callback)
 {
-  BasicRpcService::init(configFile, callback);
+  BasicRpcService::init(conf, callback);
 
   GKeyFileFlags flags = G_KEY_FILE_KEEP_COMMENTS;
+
+  // TODO: get from json conf
+  std::string configFile = "bleconfd.ini";
 
   g_autoptr(GError) error = nullptr;
   if (!g_key_file_load_from_file(key_file, configFile.c_str(), flags, &error))
@@ -78,6 +81,7 @@ AppSettingsService::set(cJSON const* req)
   return JsonRpc::notImplemented("set");
 }
 
+#if 0
 // get string value from local ini file
 char const*
 appSettings_get_string_value(char const* key, char const* section)
@@ -94,15 +98,4 @@ appSettings_get_string_value(char const* key, char const* section)
   }
   return value;
 }
-
-char const*
-appSettings_get_ble_value(char const* key)
-{
-  return appSettings_get_string_value(key, kBLE);
-}
-
-char const*
-appSettings_get_wifi_value(char const* key)
-{
-  return appSettings_get_string_value(key, kWifi);
-}
+#endif

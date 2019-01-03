@@ -17,12 +17,13 @@
 #define __BEACON_H__
 
 #include <string>
+struct cJSON;
 
 /**
  * start up beacon
  * @param s the expected device name
  * @param isNeedUpdateName is need update the device name? it need restart BLE service, will drop all connection
  */
-void startBeacon(std::string const& s);
+void startBeacon(std::string const& name, int deviceId);
 
 #endif

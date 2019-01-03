@@ -324,7 +324,8 @@ GattServer::~GattServer()
 }
 
 void
-GattServer::init(std::string const& name, std::string const& uuid)
+GattServer::init(cJSON const* conf)
+// std::string const& name, std::string const& uuid)
 {
   m_listen_fd = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
   if (m_listen_fd < 0)
@@ -353,7 +354,10 @@ GattServer::init(std::string const& name, std::string const& uuid)
   if (ret < 0)
     throw_errno(errno, "failed to listen on bluetooth socket");
 
-  startBeacon(name);
+  cJSON const* id = cJSON_GetObjectItem(conf, "hci-device-id");
+  cJSON const* name = cJSON_GetObjectItem(conf, "ble-name");
+
+  startBeacon(name->valuestring, id->valueint);
 }
 
 std::shared_ptr<RpcConnectedClient>

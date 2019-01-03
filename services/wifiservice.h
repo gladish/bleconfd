@@ -24,8 +24,7 @@ class WiFiService : public BasicRpcService
 public:
   WiFiService();
   virtual ~WiFiService();
-  virtual void init(std::string const& configFile,
-      RpcNotificationFunction const& callback) override;
+  virtual void init(cJSON const* conf, RpcNotificationFunction const& callback) override;
 private:
   cJSON* getStatus(cJSON const* req);
   cJSON* connect(cJSON const* req);

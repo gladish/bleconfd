@@ -100,9 +100,9 @@ NetService::~NetService()
 }
 
 void
-NetService::init(std::string const& configFile, RpcNotificationFunction const& callback)
+NetService::init(cJSON const* conf, RpcNotificationFunction const& callback)
 {
-  BasicRpcService::init(configFile, callback);
+  BasicRpcService::init(conf, callback);
   registerMethod("get-interfaces", [this](cJSON const* req) -> cJSON* { return this->getInterfaces(req); });
 }
 

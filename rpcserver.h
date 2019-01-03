@@ -46,7 +46,7 @@ class RpcService
 public:
   RpcService();
   virtual ~RpcService();
-  virtual void init(std::string const& configFile, RpcNotificationFunction const& callback)  = 0;
+  virtual void init(cJSON const* conf, RpcNotificationFunction const& callback)  = 0;
   virtual std::string name() const = 0;
   virtual std::vector<std::string> methodNames() const = 0;
   virtual cJSON* invokeMethod(std::string const& name, cJSON const* req) = 0;
@@ -60,7 +60,7 @@ public:
   virtual std::string name() const override;
   virtual std::vector<std::string> methodNames() const override;
   virtual cJSON* invokeMethod(std::string const& name, cJSON const* req) override;
-  virtual void init(std::string const& configFile, RpcNotificationFunction const& callback) override;
+  virtual void init(cJSON const* conf, RpcNotificationFunction const& callback) override;
 
 protected:
   using RpcMethod = std::function<cJSON* (cJSON const* req)>;
@@ -68,11 +68,13 @@ protected:
 
   void registerMethod(std::string const& name, RpcMethod const& method);
   void notifyAndDelete(cJSON* json);
+  cJSON const* settings(char const* name) const;
 
 private:
   RpcMethodMap  m_methods;
   std::string   m_name;
   RpcNotificationFunction m_notify;
+  cJSON const*  m_config;
 };
 
 class RpcListener
@@ -80,7 +82,7 @@ class RpcListener
 public:
   RpcListener() { }
   virtual ~RpcListener() { }
-  virtual void init(std::string const& name, std::string const& uuid) = 0;
+  virtual void init(cJSON const* conf) = 0;
   virtual std::shared_ptr<RpcConnectedClient> accept() = 0;
 
 public:
@@ -90,7 +92,7 @@ public:
 class RpcServer
 {
 public:
-  RpcServer(std::string const& configFile);
+  RpcServer(cJSON const* conf);
   ~RpcServer();
 
 private:
@@ -99,8 +101,7 @@ private:
   public:
     IntrospectionService(RpcServer* parent);
     virtual ~IntrospectionService();
-    virtual void init(std::string const& configFile,
-      RpcNotificationFunction const& callback) override;
+    virtual void init(cJSON const* conf, RpcNotificationFunction const& callback) override;
   private:
     cJSON* listServices(cJSON const* req);
     cJSON* listMethods(cJSON const* req);
@@ -129,7 +130,7 @@ private:
   std::queue<cJSON *>                 m_incoming_queue;
   std::condition_variable             m_cond;
   std::map< std::string, std::shared_ptr<RpcService> > m_services;
-  std::string                         m_config_file;
+  cJSON*                              m_config;
 };
 
 #endif

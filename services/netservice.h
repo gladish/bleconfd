@@ -24,8 +24,7 @@ class NetService : public BasicRpcService
 public:
   NetService();
   virtual ~NetService();
-  virtual void init(std::string const& configFile,
-      RpcNotificationFunction const& callback) override;
+  virtual void init(cJSON const* conf, RpcNotificationFunction const& callback) override;
 private:
   cJSON* getInterfaces(cJSON const* req);
 };

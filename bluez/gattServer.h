@@ -115,7 +115,7 @@ public:
   GattServer();
   virtual ~GattServer();
 
-  virtual void init(std::string const& name, std::string const& uuid) override;
+  virtual void init(cJSON const* conf) override;
   virtual std::shared_ptr<RpcConnectedClient> accept() override;
 
 private:

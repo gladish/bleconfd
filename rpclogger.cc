@@ -24,9 +24,12 @@
 #include <sys/syslog.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#include <mutex>
 
 namespace
 {
+  std::mutex s_lock;
+
   struct LevelMapping
   {
     char const* s;
@@ -86,6 +89,8 @@ RpcLogger::log(RpcLogLevel level, char const* /*file*/, int /*line*/, char const
   {
     timeval tv;
     gettimeofday(&tv, 0);
+
+    std::lock_guard<std::mutex> lock(s_lock);
     printf("%ld.%06ld (%5s) thr-%ld [%s] -- ", tv.tv_sec, tv.tv_usec, levelToString(level), syscall(__NR_gettid), "xconfigd");
     vprintf(format, args);
     printf("\n");

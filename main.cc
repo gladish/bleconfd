@@ -22,6 +22,7 @@
 #include <unistd.h>
 
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <cJSON.h>
 
@@ -56,7 +57,7 @@ std::vector< std::shared_ptr<RpcService> > services();
 
 int main(int argc, char* argv[])
 {
-  std::string configFile = "bleconfd.ini";
+  std::string configFile = "bleconfd.json";
   RpcLogger::logger().setLevel(RpcLogLevel::Info);
 
   while (true)
@@ -85,7 +86,19 @@ int main(int argc, char* argv[])
     }
   }
 
-  RpcServer server(configFile);
+  cJSON* config = nullptr;
+  std::ifstream in(configFile.c_str());
+  if (in)
+  {
+    std::string buff((std::istreambuf_iterator<char>(in)), (std::istreambuf_iterator<char>()));
+    config = cJSON_Parse(buff.c_str());
+  }
+  else
+  {
+    config = nullptr;
+  }
+
+  RpcServer server(config);
   for (auto const& service : services())
     server.registerService(service);
 
@@ -98,15 +111,14 @@ int main(int argc, char* argv[])
   }
   #endif
 
+  cJSON const* listenerConfig = cJSON_GetObjectItem(config, "listener");
+
   while (true)
   {
     try
     {
-      std::string uuid = "";
-      std::string name = "XPI-SETUP";
-
       std::shared_ptr<RpcListener> listener(RpcListener::create());
-      listener->init(name, uuid);
+      listener->init(listenerConfig);
 
       // blocks here until remote client makes BT connection
       std::shared_ptr<RpcConnectedClient> client = listener->accept();
