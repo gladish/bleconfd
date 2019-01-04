@@ -164,13 +164,6 @@ BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
   }
   else
   {
-    char* s = cJSON_Print(req);
-    if (s)
-    {
-      XLOG_INFO("req:%s", s);
-      free(s);
-    }
-
     auto itr = m_methods.find(name);
     if (itr == m_methods.end())
     {
@@ -321,9 +314,74 @@ RpcServer::invokeMethod(RpcMethodInfo const& methodInfo, cJSON const* req)
 void
 RpcServer::processRequest(cJSON const* req)
 {
-  XLOG_INFO("processing new incoming request");
-
   cJSON* res = nullptr;
+
+  XLOG_INFO("processing new incoming request");
+  {
+    char* s = cJSON_Print(req);
+    if (s)
+    {
+      XLOG_INFO("req:%s", s);
+      free(s);
+    }
+  }
+
+  // ensure json-rpc request
+  if (!JsonRpc::getString(req, "jsonrpc", false, nullptr))
+    res = processNonJsonRpcRequest(req);
+  else
+    res = processJsonRpcRequest(req);
+
+  char* s = cJSON_Print(res);
+  if (s)
+  {
+    XLOG_INFO("res:%s", s);
+    {
+      std::lock_guard<std::mutex> guard(m_mutex);
+      if (m_client)
+        m_client->enqueueForSend(s, strlen(s));
+    }
+    free(s);
+  }
+  else
+  {
+    XLOG_ERROR("failed to serialize JSON response to string");
+  }
+
+  cJSON_Delete(res);
+}
+
+cJSON*
+RpcServer::processNonJsonRpcRequest(cJSON const* req)
+{
+  cJSON* res = nullptr;
+
+  XLOG_INFO("incoming request is not jsonrpc, dispatching to last chance");
+  if (m_last_chance)
+  {
+    try
+    {
+      res = m_last_chance(req);
+    }
+    catch (std::exception const& err)
+    {
+      res = JsonRpc::makeError(-1, "unhandled exception:%s", err.what());
+    }
+  }
+  else
+  {
+    XLOG_WARN("invalid non-jsonrpc request with no last chance handler registered");
+    res = JsonRpc::makeError(-1, "only jsonrpc is supported");
+  }
+
+  return res;
+}
+
+cJSON*
+RpcServer::processJsonRpcRequest(cJSON const* req)
+{
+  cJSON* res = nullptr;
+
   cJSON* method = cJSON_GetObjectItem(req, "method");
   if (!method)
   {
@@ -361,25 +419,7 @@ RpcServer::processRequest(cJSON const* req)
   // if function returned { "code": 1234, ... } where code != 0, then
   // it's an error, else it was ok. This is handled by the wrapResponse
   int code = JsonRpc::getInt(res, "code", false, 0);
-  cJSON* envelope = JsonRpc::wrapResponse(code, res, requestId);
-
-  char* s = cJSON_Print(envelope);
-  if (s)
-  {
-    XLOG_INFO("res:%s", s);
-    {
-      std::lock_guard<std::mutex> guard(m_mutex);
-      if (m_client)
-        m_client->enqueueForSend(s, strlen(s));
-    }
-    free(s);
-  }
-  else
-  {
-    XLOG_ERROR("failed to serialize JSON response to string");
-  }
-
-  cJSON_Delete(envelope);
+  return JsonRpc::wrapResponse(code, res, requestId);
 }
 
 void
