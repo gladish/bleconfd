@@ -43,38 +43,31 @@ namespace
     cJSON*& m_json;
   };
 
-  struct RpcMethodInfo
-  {
-    RpcMethodInfo() { }
-    RpcMethodInfo(std::string const& service, std::string const& method)
-      : ServiceName(service)
-      , MethodName(method) { }
-    std::string ServiceName;
-    std::string MethodName;
+}
 
-    std::string toString() const
-    {
-      std::stringstream buff;
-      buff << ServiceName;
-      buff << '-';
-      buff << MethodName;
-      return buff.str();
-    }
-  };
+std::string
+RpcServer::RpcMethodInfo::toString() const
+{
+  std::stringstream buff;
+  buff << ServiceName;
+  buff << '-';
+  buff << MethodName;
+  return buff.str();
+}
 
-  RpcMethodInfo
-  parseMethod(char const* s)
+RpcServer::RpcMethodInfo
+RpcServer::RpcMethodInfo::parseMethod(char const* s)
+{
+  std::string service;
+  std::string method;
+
+  char const* p = strchr(s, '-');
+  if (p)
   {
-    RpcMethodInfo methodInfo;
-    char const* p = strchr(s, '-');
-    if (p)
-    {
-      methodInfo.ServiceName = std::string(s, (p-s));
-      methodInfo.MethodName = std::string(p + 1);
-    }
-    return methodInfo;
+    service = std::string(s, (p-s));
+    method = std::string(p + 1);
   }
-
+  return RpcMethodInfo(service, method);
 }
 
 std::shared_ptr<RpcListener>
@@ -159,40 +152,36 @@ BasicRpcService::notifyAndDelete(cJSON* json)
 cJSON*
 BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
 {
+  cJSON* res = nullptr;
+
+  XLOG_INFO("invoke method:%s-%s", m_name.c_str(), name.c_str());
+
   if (!req)
   {
     XLOG_ERROR("cannot invoke method %s-%s with null request",
       m_name.c_str(), name.c_str());
-    // TODO: return error
-    return nullptr;
+    res = JsonRpc::makeError(-1, "no request object");
   }
-
-  XLOG_INFO("invoke method:%s-%s", m_name.c_str(), name.c_str());
-
-  char* s = cJSON_Print(req);
-  if (s)
+  else
   {
-    XLOG_INFO("%s", s);
-    free(s);
-  }
+    char* s = cJSON_Print(req);
+    if (s)
+    {
+      XLOG_INFO("req:%s", s);
+      free(s);
+    }
 
-  auto itr = m_methods.find(name);
-  if (itr == m_methods.end())
-  {
-    XLOG_WARN("method %s-%s not found", m_name.c_str(), name.c_str());
-    return JsonRpc::makeError(-1, "method %s-%s not found", m_name.c_str(), name.c_str());
-  }
-
-  cJSON* res = nullptr;
-
-  try
-  {
-    res = itr->second(req);
-  }
-  catch (std::exception const& err)
-  {
-    XLOG_ERROR("unhandled exception:%s", err.what());
-    res = JsonRpc::makeError(-1, "%s", err.what());
+    auto itr = m_methods.find(name);
+    if (itr == m_methods.end())
+    {
+      XLOG_WARN("method %s-%s not found", m_name.c_str(), name.c_str());
+      res = JsonRpc::makeError(-1, "method %s-%s not found", m_name.c_str(), name.c_str());
+    }
+    else
+    {
+      // actually invoke the method
+      res = itr->second(req);
+    }
   }
 
   return res;
@@ -306,77 +295,91 @@ RpcServer::processIncomingQueue()
   }
 }
 
+cJSON*
+RpcServer::invokeMethod(RpcMethodInfo const& methodInfo, cJSON const* req)
+{
+  cJSON* res = nullptr;
+
+  auto service = m_services.find(methodInfo.ServiceName);
+  if (service == m_services.end())
+  {
+    res = JsonRpc::makeError(ENOENT, "service %s not found",
+      methodInfo.ServiceName.c_str());
+  }
+  else
+  {
+    res = service->second->invokeMethod(methodInfo.MethodName, req);
+    if (!res)
+      res = JsonRpc::makeError(-1, "%s.%s returned null?",
+        methodInfo.ServiceName.c_str(),
+        methodInfo.MethodName.c_str());
+  }
+
+  return res;
+}
+
 void
 RpcServer::processRequest(cJSON const* req)
 {
   XLOG_INFO("processing new incoming request");
 
+  cJSON* res = nullptr;
   cJSON* method = cJSON_GetObjectItem(req, "method");
   if (!method)
   {
     XLOG_ERROR("request doesn't contain method");
-    // TODO: respond with bad request
+    res = JsonRpc::makeError(-1, "request doesn't contain a 'method'");
   }
 
-  cJSON* id = cJSON_GetObjectItem(req, "id");
-  if (!id)
+  int requestId = -1;
+  if (!res)
   {
-    XLOG_ERROR("request doesn't contain id");
-    // TODO: respond with bad request
-  }
-
-  cJSON* envelope = nullptr;
-  JsonDeleter envelopeDeleter(envelope);
-
-  try
-  {
-    RpcMethodInfo methodInfo = parseMethod(method->valuestring);
-
-    auto service = m_services.find(methodInfo.ServiceName);
-    if (service == m_services.end())
+    cJSON* id = cJSON_GetObjectItem(req, "id");
+    if (!id)
     {
-      // TODO
-      XLOG_ERROR("failed to find service:%s", methodInfo.ServiceName.c_str());
-      return;
+      XLOG_ERROR("request doesn't contain id");
+      res = JsonRpc::makeError(-1, "request doesn't contain an 'id'");
     }
     else
     {
-      cJSON* res = nullptr;
-
-      try
-      {
-        res = service->second->invokeMethod(methodInfo.MethodName, req);
-        if (!res)
-          res = JsonRpc::makeError(-1, "unknown error");
-      }
-      catch (std::exception const& err)
-      {
-        res = JsonRpc::makeError(-1, "%s", err.what());
-      }
-
-      // if function returned { "code": 1234, ... } where code != 0, then
-      // it's an error, else it was ok. This is handled by the wrapResponse
-      int code = JsonRpc::getInt(res, "code", false, 0);
-      envelope = JsonRpc::wrapResponse(code, res, id->valueint);
-    }
-
-    char* s = cJSON_Print(envelope);
-    XLOG_INFO("response:%s", s);
-    free(s);
-
-    std::lock_guard<std::mutex> guard(m_mutex);
-    if (m_client)
-    {
-      char* s = cJSON_PrintUnformatted(envelope);
-      int n = strlen(s);
-      m_client->enqueueForSend(s, n);
-      free(s);
+      requestId = id->valueint;
     }
   }
-  catch (std::exception const& err)
+
+  if (!res)
   {
-    XLOG_ERROR("failed to queue response for send. %s", err.what());
+    try
+    {
+      res = invokeMethod(RpcMethodInfo::parseMethod(method->valuestring), req);
+    }
+    catch (std::exception const& err)
+    {
+      res = JsonRpc::makeError(-1, "unhandled exception:%s", err.what());
+    }
   }
+
+  // if function returned { "code": 1234, ... } where code != 0, then
+  // it's an error, else it was ok. This is handled by the wrapResponse
+  int code = JsonRpc::getInt(res, "code", false, 0);
+  cJSON* envelope = JsonRpc::wrapResponse(code, res, requestId);
+
+  char* s = cJSON_Print(envelope);
+  if (s)
+  {
+    XLOG_INFO("res:%s", s);
+    {
+      std::lock_guard<std::mutex> guard(m_mutex);
+      if (m_client)
+        m_client->enqueueForSend(s, strlen(s));
+    }
+    free(s);
+  }
+  else
+  {
+    XLOG_ERROR("failed to serialize JSON response to string");
+  }
+
+  cJSON_Delete(envelope);
 }
 
 void

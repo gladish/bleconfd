@@ -116,23 +116,30 @@ AppSettingsService::init(cJSON const* conf, RpcNotificationFunction const& callb
 cJSON*
 AppSettingsService::get(cJSON const* req)
 {
+  cJSON* res = nullptr;
   std::pair<std::string, std::string> key = splitKey(req);
 
   g_autoptr(GError) error = nullptr;
-  gchar* value = g_key_file_get_value(keyFile, key.first.c_str(), key.second.c_str(), &error);
+  g_autofree gchar* value = g_key_file_get_value(keyFile, key.first.c_str(), key.second.c_str(), &error);
   if (!value)
   {
     if (!g_error_matches(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND) &&
         !g_error_matches(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_GROUP_NOT_FOUND))
     {
-      return JsonRpc::makeError(error->code, "Error invoking g_key_file_get_value:%s",
+      res = JsonRpc::makeError(error->code, "Error invoking g_key_file_get_value:%s",
         error->message);
     }
+    else
+    {
+      res = JsonRpc::makeError(-1, "%s.%s not found", key.first.c_str(), key.second.c_str());
+    }
+  }
+  else
+  {
+    cJSON_AddItemToObject(res, "name",  cJSON_CreateString(JsonRpc::getString(req, "/params/key", true)));
+    cJSON_AddItemToObject(res, "value", cJSON_CreateString(value));
   }
 
-  cJSON* res = cJSON_CreateObject();
-  cJSON_AddItemToObject(res, "name",  cJSON_CreateString(JsonRpc::getString(req, "/params/key", true)));
-  cJSON_AddItemToObject(res, "value", cJSON_CreateString(value));
   return res;
 }
 

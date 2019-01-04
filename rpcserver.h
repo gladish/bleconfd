@@ -107,6 +107,18 @@ private:
     RpcServer* m_server;
   };
 
+  struct RpcMethodInfo
+  {
+    RpcMethodInfo() { }
+    RpcMethodInfo(std::string const& service, std::string const& method)
+      : ServiceName(service)
+      , MethodName(method) { }
+    std::string const ServiceName;
+    std::string const MethodName;
+    std::string toString() const;
+    static RpcMethodInfo parseMethod(char const* s);
+  };
+
   friend class IntrospectionService;
 
 public:
@@ -120,6 +132,7 @@ public:
 private:
   void processIncomingQueue();
   void processRequest(cJSON const* req);
+  cJSON* invokeMethod(RpcMethodInfo const& methodInfo, cJSON const* req);
 
 private:
   std::shared_ptr<RpcConnectedClient> m_client;

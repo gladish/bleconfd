@@ -55,7 +55,7 @@ run_test(void* argp)
     // cJSON_AddItemToObject(req, "params", params);
 
     // config-set
-    #if 0
+    #if 1
     char key[64];
     snprintf(key, sizeof(key), "foo.bar%d", i);
 
@@ -69,17 +69,18 @@ run_test(void* argp)
     #endif
 
     // config-get
+    #if 0
     char key[64];
     snprintf(key, sizeof(key), "foo.bar%d", i);
 
     cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get"));
     cJSON_AddItemToObject(params, "key", cJSON_CreateString(key));
     cJSON_AddItemToObject(req, "params", params);
+    #endif
 
 
     char* s = cJSON_PrintUnformatted(req);
-    int n = strlen(s);
-    server->onIncomingMessage(s, n);
+    server->onIncomingMessage(s, strlen(s));
     free(s);
 
     cJSON_Delete(req);
