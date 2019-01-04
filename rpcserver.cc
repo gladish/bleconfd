@@ -139,7 +139,7 @@ BasicRpcService::registerMethod(std::string const& name, RpcMethod const& method
 }
 
 void
-BasicRpcService::init(cJSON const* config, RpcNotificationFunction const& callback)
+BasicRpcService::init(cJSON const* UNUSED_PARAM(config), RpcNotificationFunction const& callback)
 {
   m_notify = callback;
 }
@@ -184,6 +184,7 @@ BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
   }
 
   cJSON* res = nullptr;
+
   try
   {
     res = itr->second(req);
@@ -191,7 +192,7 @@ BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
   catch (std::exception const& err)
   {
     XLOG_ERROR("unhandled exception:%s", err.what());
-    return JsonRpc::makeError(-1, "unhandled exception:%s", err.what());
+    res = JsonRpc::makeError(-1, "%s", err.what());
   }
 
   return res;
@@ -340,16 +341,23 @@ RpcServer::processRequest(cJSON const* req)
     }
     else
     {
-      cJSON* res = service->second->invokeMethod(methodInfo.MethodName, req);
-      if (res)
+      cJSON* res = nullptr;
+
+      try
       {
-        envelope = JsonRpc::wrapResponse(res, id->valueint);
+        res = service->second->invokeMethod(methodInfo.MethodName, req);
+        if (!res)
+          res = JsonRpc::makeError(-1, "unknown error");
       }
-      else
+      catch (std::exception const& err)
       {
-        // TODO:
-        // cJSON_AddItemToObject(response_envelope, "error", temp);
+        res = JsonRpc::makeError(-1, "%s", err.what());
       }
+
+      // if function returned { "code": 1234, ... } where code != 0, then
+      // it's an error, else it was ok. This is handled by the wrapResponse
+      int code = JsonRpc::getInt(res, "code", false, 0);
+      envelope = JsonRpc::wrapResponse(code, res, id->valueint);
     }
 
     char* s = cJSON_Print(envelope);

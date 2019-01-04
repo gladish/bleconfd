@@ -21,7 +21,7 @@
 class JsonRpc
 {
 public:
-  static cJSON* wrapResponse(cJSON* res, int reqId);
+  static cJSON* wrapResponse(int code, cJSON* res, int reqId);
   static cJSON* makeError(int code, char const* fmt, ...) __attribute__((format (printf, 2, 3)));
   static cJSON* notImplemented(char const* methodName);
 

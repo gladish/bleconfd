@@ -29,6 +29,8 @@ private:
   cJSON* get(cJSON const* req);
   cJSON* set(cJSON const* req);
   cJSON* getStatus(cJSON const* req);
+private:
+  std::string m_config_file;
 };
 
 #endif

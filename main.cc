@@ -21,6 +21,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -29,33 +30,61 @@
 void*
 run_test(void* argp)
 {
-  sleep(2);
+  RpcServer* server = reinterpret_cast<RpcServer *>(argp);
 
-  RpcServer* server = (RpcServer*) argp;
+  std::this_thread::sleep_for(std::chrono::seconds(2));
 
-  cJSON* req = cJSON_CreateObject();
-  cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-  cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(12345));
+  uint32_t requestId = 10000;
 
-  cJSON* params = cJSON_CreateObject();
+  for (int i = 0; i < 10; ++i)
+  {
+    cJSON* req = cJSON_CreateObject();
+    cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
+    cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(requestId++));
 
-  #if 0
-//  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-scan"));
-//  cJSON_AddItemToObject(req, "method", cJSON_CreateString("rpc-list-methods"));
+    cJSON* params = cJSON_CreateObject();
 
-  cJSON_AddItemToObject(params, "band", cJSON_CreateString("24"));
-//  cJSON_AddItemToObject(params, "service", cJSON_CreateString("wifi"));
-  #endif
+    // cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
+    // cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-scan"));
+    // cJSON_AddItemToObject(req, "method", cJSON_CreateString("rpc-list-methods"));
+    // cJSON_AddItemToObject(params, "band", cJSON_CreateString("24"));
+    // cJSON_AddItemToObject(params, "service", cJSON_CreateString("wifi"));
 
-  cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get-status"));
-  cJSON_AddItemToObject(req, "params", params);
+    // config-get-status
+    // cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get-status"));
+    // cJSON_AddItemToObject(req, "params", params);
+
+    // config-set
+    #if 0
+    char key[64];
+    snprintf(key, sizeof(key), "foo.bar%d", i);
+
+    char val[64];
+    snprintf(val, sizeof(val), "SomeValue=%d", i);
+
+    cJSON_AddItemToObject(params, "key", cJSON_CreateString(key));
+    cJSON_AddItemToObject(params, "value", cJSON_CreateString(val));
+    cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-set"));
+    cJSON_AddItemToObject(req, "params", params);
+    #endif
+
+    // config-get
+    char key[64];
+    snprintf(key, sizeof(key), "foo.bar%d", i);
+
+    cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get"));
+    cJSON_AddItemToObject(params, "key", cJSON_CreateString(key));
+    cJSON_AddItemToObject(req, "params", params);
 
 
-  char* s = cJSON_PrintUnformatted(req);
-  int n = strlen(s);
-  server->onIncomingMessage(s, n);
-  free(s);
+    char* s = cJSON_PrintUnformatted(req);
+    int n = strlen(s);
+    server->onIncomingMessage(s, n);
+    free(s);
+
+    cJSON_Delete(req);
+    sleep(1);
+  }
 
   return NULL;
 }

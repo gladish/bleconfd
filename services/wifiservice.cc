@@ -558,7 +558,7 @@ WiFiService::scan(cJSON const* req)
 
   cJSON* start = cJSON_CreateObject();
   cJSON_AddStringToObject(start, "status", "start-scan");
-  notifyAndDelete(JsonRpc::wrapResponse(start, reqId));
+  notifyAndDelete(JsonRpc::wrapResponse(0, start, reqId));
 
   int id = 0;
   while (true)
@@ -572,7 +572,7 @@ WiFiService::scan(cJSON const* req)
     {
       cJSON* bss = wpaControl_createResponse(buff);
       if (bss)
-        notifyAndDelete(JsonRpc::wrapResponse(bss, reqId));
+        notifyAndDelete(JsonRpc::wrapResponse(0, bss, reqId));
     }
 
     id++;

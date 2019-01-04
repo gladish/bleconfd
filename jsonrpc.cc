@@ -355,13 +355,16 @@ jsonRpc_binaryDecode(char const* s, std::vector<uint8_t>& decoded)
 #endif
 
 cJSON*
-JsonRpc::wrapResponse(cJSON* res, int reqId)
+JsonRpc::wrapResponse(int code, cJSON* res, int reqId)
 {
   cJSON* envelope = cJSON_CreateObject();
   cJSON_AddStringToObject(envelope, "jsonrpc", kJsonRpcVersion);
   if (reqId != -1)
     cJSON_AddNumberToObject(envelope, "id", reqId);
-  cJSON_AddItemToObject(envelope, "result", res);
+  if (code == 0)
+    cJSON_AddItemToObject(envelope, "result", res);
+  else
+    cJSON_AddItemToObject(envelope, "error", res);
   return envelope;
 }
 
