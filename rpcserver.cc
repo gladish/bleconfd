@@ -23,6 +23,7 @@
 #endif
 
 #include <stdarg.h>
+#include <sys/stat.h>
 
 extern "C" RpcService* AppSettings_Create();
 extern "C" RpcService* WiFiService_Create();
@@ -42,6 +43,13 @@ namespace
   private:
     cJSON*& m_json;
   };
+
+  bool fileExists(char const* s)
+  {
+    struct stat buf;
+    memset(&buf, 0, sizeof(buf));
+    return stat(s, &buf) == 0;
+  }
 
 }
 
@@ -180,14 +188,15 @@ BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
   return res;
 }
 
-RpcServer::RpcServer(cJSON const* config)
+RpcServer::RpcServer(std::string const& configFile, cJSON const* config)
+  : m_config_file(configFile)
 {
   if (config)
     m_config = cJSON_Duplicate(config, true);
   else
     m_config = nullptr;
 
-  std::shared_ptr<RpcService> s(new IntrospectionService(this));
+  std::shared_ptr<RpcService> s(new RpcSystemService(this));
   registerService(s);
 
   m_dispatch_thread.reset(new std::thread([this] { this->processIncomingQueue(); }));
@@ -454,26 +463,43 @@ RpcServer::registerService(std::shared_ptr<RpcService> const& service)
   service->init(conf, callback);
 }
 
-RpcServer::IntrospectionService::IntrospectionService(RpcServer* parent)
+RpcServer::RpcSystemService::RpcSystemService(RpcServer* parent)
   : BasicRpcService("rpc")
   , m_server(parent)
 {
 }
 
-RpcServer::IntrospectionService::~IntrospectionService()
+RpcServer::RpcSystemService::~RpcSystemService()
 {
 }
 
 void
-RpcServer::IntrospectionService::init(cJSON const* UNUSED_PARAM(config),
+RpcServer::RpcSystemService::init(cJSON const* UNUSED_PARAM(config),
   RpcNotificationFunction const& UNUSED_PARAM(callback))
 {
+  // openssl genpkey -algorithm Ec -pkeyopt ec_paramgen_curve:P-256 -pkeyopt ec_param_enc:named_curve > /tmp/bootstrap_private.pem
+  // openssl pkey -pubout -in /tmp/bootstrap_private.pem > /tmp/bootstrap_public.pem
+
   registerMethod("list-services", [this](cJSON const* req) -> cJSON* { return this->listServices(req); });
   registerMethod("list-methods", [this](cJSON const* req) -> cJSON* { return this->listMethods(req); });
+  registerMethod("get-server-pubkey", [this](cJSON const* req) -> cJSON* { return this->getServerPublicKey(req); });
+  registerMethod("set-client-pubkey", [this](cJSON const* req) -> cJSON* { return this->setClientPublicKey(req); });
 }
 
 cJSON*
-RpcServer::IntrospectionService::listServices(cJSON const* UNUSED_PARAM(req))
+RpcServer::RpcSystemService::getServerPublicKey(cJSON const* req)
+{
+  return JsonRpc::notImplemented(__FUNCTION__);
+}
+
+cJSON*
+RpcServer::RpcSystemService::setClientPublicKey(cJSON const* req)
+{
+  return JsonRpc::notImplemented(__FUNCTION__);
+}
+
+cJSON*
+RpcServer::RpcSystemService::listServices(cJSON const* UNUSED_PARAM(req))
 {
   cJSON* res = cJSON_CreateObject();
   cJSON* names = cJSON_AddArrayToObject(res, "services");
@@ -485,7 +511,7 @@ RpcServer::IntrospectionService::listServices(cJSON const* UNUSED_PARAM(req))
 }
 
 cJSON*
-RpcServer::IntrospectionService::listMethods(cJSON const* req)
+RpcServer::RpcSystemService::listMethods(cJSON const* req)
 {
   cJSON* res = cJSON_CreateObject();
   cJSON const* service = JsonRpc::search(req, "/params/service", true);

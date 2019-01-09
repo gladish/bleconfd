@@ -90,19 +90,21 @@ public:
 class RpcServer
 {
 public:
-  RpcServer(cJSON const* conf);
+  RpcServer(std::string const& configFile, cJSON const* config);
   ~RpcServer();
 
 private:
-  class IntrospectionService : public BasicRpcService
+  class RpcSystemService : public BasicRpcService
   {
   public:
-    IntrospectionService(RpcServer* parent);
-    virtual ~IntrospectionService();
+    RpcSystemService(RpcServer* parent);
+    virtual ~RpcSystemService();
     virtual void init(cJSON const* conf, RpcNotificationFunction const& callback) override;
   private:
     cJSON* listServices(cJSON const* req);
     cJSON* listMethods(cJSON const* req);
+    cJSON* getServerPublicKey(cJSON const* req);
+    cJSON* setClientPublicKey(cJSON const* req);
   private:
     RpcServer* m_server;
   };
@@ -119,7 +121,7 @@ private:
     static RpcMethodInfo parseMethod(char const* s);
   };
 
-  friend class IntrospectionService;
+  friend class RpcSystemService;
 
 public:
   void setClient(std::shared_ptr<RpcConnectedClient> const& tport);
@@ -145,6 +147,7 @@ private:
   std::condition_variable             m_cond;
   std::map< std::string, std::shared_ptr<RpcService> > m_services;
   cJSON*                              m_config;
+  std::string                         m_config_file;
   RpcMethod                           m_last_chance;
 };
 

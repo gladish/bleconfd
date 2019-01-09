@@ -135,7 +135,7 @@ int main(int argc, char* argv[])
     config = nullptr;
   }
 
-  RpcServer server(config);
+  RpcServer server(configFile, config);
   for (auto const& service : services())
     server.registerService(service);
 
