@@ -59,6 +59,28 @@ static RpcNotificationFunction responseHandler = nullptr;
 
 static cJSON* wpaControl_parseScanResult(std::string const& line);
 
+
+static void chomp(std::string& s)
+{
+  if (s.size() > 0)
+  {
+    char ch = s[s.size() - 1];
+    if (ch == '\r' || ch == '\n')
+      s = s.substr(0, s.size() -1 );
+  }
+}
+
+static bool ssidCompare(char const* s, char const* t)
+{
+  if (!s || !t) return false;
+  if (*s == '"') s++;
+  if (*t == '"') t++;
+  if (!s || !t) return false;
+
+  size_t n = std::min( strlen(s), strlen(t) );
+  return strncmp(s, t, n) == 0;
+}
+
 static bool
 ok(std::string const& s)
 {
@@ -253,7 +275,7 @@ wpaControl_readNotificationSocket(void* argp)
 }
 
 int
-wpaControl_command(char const* cmd, std::string& res, int max = 4096)
+wpaControl_runCommand(char const* cmd, std::string& res, int max = 4096)
 {
   res.reserve(max);
   res.resize(max);
@@ -291,14 +313,14 @@ wpaControl_shutdown()
 }
 
 static int
-wpaControl_create_network(int* networkId)
+wpaControl_createNetwork(int* networkId)
 {
   std::string res;
 
   if (!networkId)
     return EINVAL;
 
-  int ret = wpaControl_command("ADD_NETWORK", res);
+  int ret = wpaControl_runCommand("ADD_NETWORK", res);
   if (ret != 0)
   {
     int err = errno;
@@ -312,7 +334,7 @@ wpaControl_create_network(int* networkId)
 }
 
 static int
-wpaControl_connect_WPA2(int networkId, char const* ssid, char const* wpa_pass)
+wpaControl_configureWpa2Network(int networkId, char const* ssid, char const* wpa_pass)
 {
   std::string buff;
 
@@ -320,34 +342,46 @@ wpaControl_connect_WPA2(int networkId, char const* ssid, char const* wpa_pass)
   char command_buff[512];
 
   sprintf(command_buff, "SET_NETWORK %d ssid \"%s\"", networkId, ssid);
-  ret = wpaControl_command(command_buff, buff);
+  ret = wpaControl_runCommand(command_buff, buff);
   if (ret < 0)
   {
+    int err = errno;
     XLOG_ERROR("wpaControl_connect_WPA2 set ssid failed");
-    return errno;
+    return err;
   }
 
   sprintf(command_buff, "SET_NETWORK %d psk \"%s\"", networkId, wpa_pass);
-  ret = wpaControl_command(command_buff, buff);
+  ret = wpaControl_runCommand(command_buff, buff);
   if (ret < 0)
   {
+    int err = errno;
     XLOG_ERROR("wpaControl_connect_WPA2 set psk failed");
-    return errno;
+    return err;
   }
 
   XLOG_DEBUG("SET_NETWORK successful %d", networkId);
 
   sprintf(command_buff, "SELECT_NETWORK %d", networkId);
-  ret = wpaControl_command(command_buff, buff);
+  ret = wpaControl_runCommand(command_buff, buff);
   if (ret < 0)
   {
+    int err = errno;
     XLOG_ERROR("wpaControl_connect_WPA2 select network failed failed");
-    return errno;
+    return err;
+  }
+  else
+  {
+    XLOG_DEBUG("SELECT_NETWORK successful %d", networkId);
   }
 
-  wpaControl_command("SAVE_CONFIG", buff);
+  ret = wpaControl_runCommand("SAVE_CONFIG", buff);
+  if (ret < 0)
+  {
+    int err = errno;
+    XLOG_WARN("Failed to save wpa_supplicant configuraton");
+    return err;
+  }
 
-  XLOG_DEBUG("SELECT_NETWORK successful %d", networkId);
   return 0;
 }
 
@@ -356,7 +390,7 @@ std::string
 wpaControl_getState()
 {
   std::string res;
-  wpaControl_command("STATUS", res);
+  wpaControl_runCommand("STATUS", res);
 
   std::vector<std::string> lines = split(res, "\n");
   for (size_t i = 0; i < lines.size(); i++)
@@ -403,7 +437,7 @@ watch_wlan_state(void* UNUSED_PARAM(argp))
 
       cJSON* rsp = wpaControl_createAsyncConnectResponse("connect successful", state);
       std::string statusBuffer;
-      wpaControl_command("STATUS", statusBuffer);
+      wpaControl_runCommand("STATUS", statusBuffer);
       cJSON_AddItemToObject(rsp, "wlanStatus", wpaControl_createResponse(statusBuffer));
 
       responseHandler(rsp);
@@ -419,25 +453,61 @@ cJSON*
 wpaControl_connectToNetwork(cJSON const* req)
 {
   char* s = cJSON_Print(req);
-  XLOG_INFO("connect:%s", s);
-  free(s);
-
-  cJSON const* pass = JsonRpc::search(req, "/params/cred/pass", true);
-  cJSON const* ssid = JsonRpc::search(req, "/params/discovery/ssid", true);
-
-  int networkId = -1;
-  int ret = wpaControl_create_network(&networkId);
-  if (ret)
+  if (s)
   {
-    int err = errno;
-    XLOG_WARN("failed to create network:%s", strerror(err));
-    return nullptr;
+    XLOG_INFO("connect:%s", s);
+    free(s);
   }
 
-  XLOG_INFO("new network created, index = %d", networkId);
+  char const* pass = JsonRpc::getString(req, "/params/cred/pass", true);
+  char const* ssid = JsonRpc::getString(req, "/params/discovery/ssid", true);
 
-  wpaControl_connect_WPA2(networkId, ssid->valuestring, pass->valuestring);
-  return nullptr;
+  int ret = 0;
+  int networkId = 0;
+
+  // first list the configured networks.
+  // if one matches ssid, then simply update the password
+  int index = 0;
+  std::string buff;
+
+  do
+  {
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "GET_NETWORK %d ssid", index);
+
+    ret = wpaControl_runCommand(cmd, buff);
+    if (ret == 0)
+    {
+      chomp(buff);
+      if (ssidCompare(buff.c_str(), ssid))
+      {
+        XLOG_INFO("network '%s' already exists %d", ssid, index);
+        networkId = index;
+      }
+    }
+    else
+    {
+      // GET_NETWORK <n> SSID where n is out of bounds
+      // returns FAIL also
+      buff = "FAIL";
+    }
+    index++;
+  }
+  while ((networkId == 0) && (buff != "FAIL"));
+
+  if (networkId == 0)
+  {
+    ret = wpaControl_createNetwork(&networkId);
+    if (ret)
+    {
+      int err = errno;
+      return JsonRpc::makeError(err, "failed to create network. %s", strerror(err));
+    }
+    XLOG_INFO("new network created, index = %d", networkId);
+  }
+
+  ret = wpaControl_configureWpa2Network(networkId, ssid, pass);
+  return cJSON_CreateString("ok");
 }
 
 
@@ -448,7 +518,7 @@ wpaControl_getStatus(cJSON const* UNUSED_PARAM(req))
 
   cJSON* res = nullptr;
 
-  int ret = wpaControl_command("STATUS", buff);
+  int ret = wpaControl_runCommand("STATUS", buff);
   if (ret)
     res = wpaControl_createError(ret);
   else
@@ -545,7 +615,7 @@ WiFiService::scan(cJSON const* req)
 
   std::string buff;
 
-  int ret = wpaControl_command("SCAN", buff);
+  int ret = wpaControl_runCommand("SCAN", buff);
   if (ret)
   {
     XLOG_WARN("error starting scan:%s", strerror(ret));
@@ -567,7 +637,7 @@ WiFiService::scan(cJSON const* req)
     snprintf(cmd, sizeof(cmd), "BSS %d", id);
 
     buff.resize(0);
-    ret = wpaControl_command(cmd,  buff, 8192);
+    ret = wpaControl_runCommand(cmd,  buff, 8192);
     if (!ret)
     {
       cJSON* bss = wpaControl_createResponse(buff);
