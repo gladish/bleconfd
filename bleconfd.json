@@ -19,7 +19,23 @@
       "settings":{
         "db-file": "bleconfd.ini"
       }
+    },
+
+    {
+      "name": "cmd",
+      "settings": {
+        "commands": [
+          {
+            "name": "test-one",
+            "exec": "/bin/ls"
+          },
+
+          {
+            "name": "test-two",
+            "exec": "/bin/pwd"
+          }
+        ]
+      }
     }
   ]
 }
-

@@ -19,6 +19,7 @@ SRCS=\
   appsettings.cc \
   wifiservice.cc \
   netservice.cc \
+  shellservice.cc \
   ecdh.cc
 
 ifneq ($(WITH_BLUEZ),)
@@ -63,4 +64,7 @@ wifiservice.o: services/wifiservice.cc
 	$(CXX) $(CPPFLAGS) -c $< -o $@
 
 netservice.o: services/netservice.cc
+	$(CXX) $(CPPFLAGS) -c $< -o $@
+
+shellservice.o: services/shellservice.cc
 	$(CXX) $(CPPFLAGS) -c $< -o $@

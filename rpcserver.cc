@@ -28,6 +28,7 @@
 extern "C" RpcService* AppSettings_Create();
 extern "C" RpcService* WiFiService_Create();
 extern "C" RpcService* NetService_Create();
+extern "C" RpcService* ShellService_Create();
 
 namespace
 {
@@ -50,7 +51,6 @@ namespace
     memset(&buf, 0, sizeof(buf));
     return stat(s, &buf) == 0;
   }
-
 }
 
 std::string
@@ -95,7 +95,8 @@ services()
   {
     std::shared_ptr<RpcService>(AppSettings_Create()),
     std::shared_ptr<RpcService>(WiFiService_Create()),
-    std::shared_ptr<RpcService>(NetService_Create())
+    std::shared_ptr<RpcService>(NetService_Create()),
+    std::shared_ptr<RpcService>(ShellService_Create())
   };
   return services;
 }

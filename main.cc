@@ -50,9 +50,16 @@ run_test(void* argp)
     // cJSON_AddItemToObject(params, "band", cJSON_CreateString("24"));
     // cJSON_AddItemToObject(params, "service", cJSON_CreateString("wifi"));
 
+    cJSON_AddItemToObject(req, "method", cJSON_CreateString("cmd-test-one"));
+
     // config-get-status
-    // cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get-status"));
-    // cJSON_AddItemToObject(req, "params", params);
+    #if 0
+    cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get-status"));
+    cJSON_AddItemToObject(req, "params", params);
+    #endif
+
+    // wifi-connect
+    #if 0
     cJSON* cred = cJSON_CreateObject();
     cJSON_AddItemToObject(cred, "pass", cJSON_CreateString("jake1234"));
     cJSON_AddItemToObject(params, "cred", cred);
@@ -61,9 +68,9 @@ run_test(void* argp)
     cJSON_AddItemToObject(disco, "ssid", cJSON_CreateString("JAKE_24"));
     cJSON_AddItemToObject(params, "discovery", disco);
 
-    // wifi-connect
     cJSON_AddItemToObject(req, "params", params);
     cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-connect"));
+    #endif
 
     // config-set
     #if 0
