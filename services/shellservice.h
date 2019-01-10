@@ -25,8 +25,8 @@ public:
   ShellService();
   virtual ~ShellService();
   virtual void init(cJSON const* conf, RpcNotificationFunction const& callback) override;
-  virtual cJSON* invokeMethod(std::string const& name, cJSON const* req) override;
 private:
+  cJSON* executeCommand(cJSON const* req);
   cJSON*  m_commands;
 };
 

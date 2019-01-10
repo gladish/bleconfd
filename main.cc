@@ -50,7 +50,14 @@ run_test(void* argp)
     // cJSON_AddItemToObject(params, "band", cJSON_CreateString("24"));
     // cJSON_AddItemToObject(params, "service", cJSON_CreateString("wifi"));
 
-    cJSON_AddItemToObject(req, "method", cJSON_CreateString("cmd-test-one"));
+    // cmd-exec
+    cJSON_AddItemToObject(req, "method", cJSON_CreateString("cmd-exec"));
+    cJSON_AddItemToObject(params, "command_name", cJSON_CreateString("test-one"));
+
+    cJSON* args = cJSON_CreateObject();
+    cJSON_AddItemToObject(args, "path", cJSON_CreateString("/tmp"));
+    cJSON_AddItemToObject(params, "args", args);
+    cJSON_AddItemToObject(req, "params", params);
 
     // config-get-status
     #if 0

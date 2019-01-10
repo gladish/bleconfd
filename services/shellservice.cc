@@ -97,6 +97,7 @@ void
 ShellService::init(cJSON const* conf, RpcNotificationFunction const& callback)
 {
   BasicRpcService::init(conf, callback);
+  registerMethod("exec", [this](cJSON const* req) -> cJSON* { return this->executeCommand(req); });
 
   cJSON const* settings = cJSON_GetObjectItem(conf, "settings");
   if (settings)
@@ -108,20 +109,25 @@ ShellService::init(cJSON const* conf, RpcNotificationFunction const& callback)
 }
 
 cJSON*
-ShellService::invokeMethod(std::string const& name, cJSON const* UNUSED_PARAM(req))
+ShellService::executeCommand(cJSON const* req)
 {
+  char const* commandName = JsonRpc::getString(req, "/params/command_name", true);
+
   // TODO: req should be able to pass in command line arguments
+  // ${name} should be replaced with /params/args/name's value
 
   cJSON* res = nullptr;
-  cJSON const* methodInfo = findCommand(m_commands, name.c_str());
+  cJSON const* methodInfo = findCommand(m_commands, commandName);
+
   if (!methodInfo)
   {
     res = JsonRpc::makeError(-1, "can't find configuration for shell command '%s'",
-      name.c_str());
+      commandName);
   }
   else
   {
     res = invokeShellCommand(methodInfo);
   }
+
   return res;
 }
