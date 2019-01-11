@@ -453,6 +453,8 @@ startBeacon(std::string const& name, int deviceId)
  
   hcitoolCmd(deviceInfo.dev_id, parseArgs(buff));
 
+  system("hcitool cmd 0x08 0x0006 A0 00 A0 00 00 00 00 00 00 00 00 00 00 07 00");
+
   #if 0
   std::string startUpCmd02(appSettings_get_ble_value("ble_init_cmd02"));
   hcitoolCmd(di.dev_id, parseArgs(startUpCmd02));

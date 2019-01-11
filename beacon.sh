@@ -11,7 +11,9 @@ hciconfig hci0 name XPI-SETUP
 # 36c8807bf460cb41d145                                           ####
 # next six bytes are just all zeros with a 1 at end
 hcitool cmd 0x08 0x0008 1f 02 01 06 03 03 aa fe 17 16 aa fe 00 e7 36 c8 80 7b f4 60 cb 41 d1 45 00 00 00 00 00 01 00 00
-# not sure what this is needed for
-#hcitool cmd 0x08 0x0006 A0 00 A0 00 00 00 00 00 00 00 00 00 00 07 00
+
+# This sets beacon interval
+# https://stackoverflow.com/questions/21124993/is-there-a-way-to-increase-ble-advertisement-frequency-in-bluez
+hcitool cmd 0x08 0x0006 A0 00 A0 00 00 00 00 00 00 00 00 00 00 07 00
 hciconfig hci0 leadv
 
