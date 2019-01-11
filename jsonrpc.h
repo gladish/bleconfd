@@ -17,6 +17,7 @@
 #define __JSON_RPC_H__
 
 #include <cJSON.h>
+#include <string>
 
 class JsonRpc
 {
@@ -38,6 +39,14 @@ public:
     char const*   name,
     bool          required,
     char const*   defaultValue = nullptr);
+
+  static std::string
+  getStringWithExpansion(
+    cJSON const*  json,
+    char const*   name,
+    bool          required,
+    char const*   defaultValue = nullptr,
+    cJSON const*  replacements = nullptr);
 
   static cJSON const* search(cJSON const* json, char const* name, bool required);
 };

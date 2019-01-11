@@ -18,17 +18,13 @@
 #include "rpclogger.h"
 #include "jsonrpc.h"
 
+
 #ifdef WITH_BLUEZ
 #include "bluez/gattServer.h"
 #endif
 
 #include <stdarg.h>
 #include <sys/stat.h>
-
-extern "C" RpcService* AppSettings_Create();
-extern "C" RpcService* WiFiService_Create();
-extern "C" RpcService* NetService_Create();
-extern "C" RpcService* ShellService_Create();
 
 namespace
 {
@@ -51,6 +47,8 @@ namespace
     memset(&buf, 0, sizeof(buf));
     return stat(s, &buf) == 0;
   }
+
+  std::map< std::string, RpcServiceConstructor > serviceConstructors;
 }
 
 std::string
@@ -88,17 +86,25 @@ RpcListener::create()
   );
 }
 
-std::vector< std::shared_ptr<RpcService> >
-services()
+RpcService*
+RpcService::createServiceByName(std::string const& name)
 {
-  std::vector< std::shared_ptr<RpcService> > services
-  {
-    std::shared_ptr<RpcService>(AppSettings_Create()),
-    std::shared_ptr<RpcService>(WiFiService_Create()),
-    std::shared_ptr<RpcService>(NetService_Create()),
-    std::shared_ptr<RpcService>(ShellService_Create())
-  };
-  return services;
+  RpcService* service = nullptr;
+  auto itr = serviceConstructors.find(name);
+  if (itr != serviceConstructors.end())
+    service = itr->second();
+  return service;
+}
+
+RpcServiceRegistrar::RpcServiceRegistrar(std::string const& name, RpcServiceConstructor const& ctor)
+{
+  RpcService::registerServiceConstructor(name, ctor);
+}
+
+void
+RpcService::registerServiceConstructor(std::string const& name, RpcServiceConstructor const& ctor)
+{
+  serviceConstructors.insert(std::make_pair(name, ctor));
 }
 
 RpcService::RpcService()
@@ -117,6 +123,8 @@ BasicRpcService::BasicRpcService(std::string const& name)
 
 BasicRpcService::~BasicRpcService()
 {
+  if (m_config)
+    cJSON_Delete(m_config);
 }
 
 std::string
@@ -141,9 +149,10 @@ BasicRpcService::registerMethod(std::string const& name, RpcMethod const& method
 }
 
 void
-BasicRpcService::init(cJSON const* UNUSED_PARAM(config), RpcNotificationFunction const& callback)
+BasicRpcService::init(cJSON const* config, RpcNotificationFunction const& callback)
 {
   m_notify = callback;
+  m_config = cJSON_Duplicate(config, true);
 }
 
 void
@@ -199,6 +208,22 @@ RpcServer::RpcServer(std::string const& configFile, cJSON const* config)
 
   std::shared_ptr<RpcService> s(new RpcSystemService(this));
   registerService(s);
+
+  if (m_config)
+  {
+    cJSON const* services = cJSON_GetObjectItem(config, "services");
+    if (services)
+    {
+      for (int i = 0, n = cJSON_GetArraySize(services); i < n; ++i)
+      {
+        cJSON const* service = cJSON_GetArrayItem(services, i);
+        cJSON const* name = cJSON_GetObjectItem(service, "name");
+        std::shared_ptr<RpcService> s(RpcService::createServiceByName(name->valuestring));
+        if (s)
+          registerService(s);
+      }
+    }
+  }
 
   m_dispatch_thread.reset(new std::thread([this] { this->processIncomingQueue(); }));
 }
@@ -528,3 +553,17 @@ RpcServer::RpcSystemService::listMethods(cJSON const* req)
   }
   return res;
 }
+
+
+std::string chomp(char const* s)
+{
+  std::string t(s);
+  size_t n = strlen(s);
+  if (s[n - 1] == '\r' || s[n - 1] == '\n')
+    t = std::string(s, n - 1);
+  else
+    t = s;
+  return t;
+}
+
+

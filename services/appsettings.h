@@ -25,10 +25,16 @@ public:
   AppSettingsService();
   virtual ~AppSettingsService();
   virtual void init(cJSON const* conf, RpcNotificationFunction const& callback) override;
+
 private:
   cJSON* get(cJSON const* req);
   cJSON* set(cJSON const* req);
   cJSON* getStatus(cJSON const* req);
+  cJSON* getKeys(cJSON const* req);
+
+private:
+  cJSON const* getDynamicConfig(char const* s) const;
+
 private:
   std::string m_config_file;
 };

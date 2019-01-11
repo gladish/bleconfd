@@ -109,10 +109,15 @@ JsonRpc::search(cJSON const* json, char const* name, bool required)
 
   if (!item && required)
   {
+    char* s = cJSON_Print(json);
+    XLOG_INFO("missing %s from the following json", name);
+    XLOG_INFO("%s", s);
+    free(s);
+
     std::stringstream buff;
-    buff << "missing argument ";
+    buff << "missing field ";
     buff << name;
-    buff << " from argv list";
+    buff << " from object";
     throw std::runtime_error(buff.str());
   }
 
@@ -135,16 +140,6 @@ JsonRpc::getString(cJSON const* req, char const* name, bool required, char const
   char const* s = defaultValue;
 
   cJSON const* item = JsonRpc::search(req, name, required);
-
-  if (!item && required)
-  {
-    std::stringstream buff;
-    buff << "missing argument ";
-    buff << name;
-    buff << " from argv list";
-    throw std::runtime_error(buff.str());
-  }
-
   if (item)
     s = item->valuestring;
 
@@ -152,6 +147,58 @@ JsonRpc::getString(cJSON const* req, char const* name, bool required, char const
     s = NULL;
 
   return s;
+}
+
+std::string
+JsonRpc::getStringWithExpansion(
+    cJSON const*  json,
+    char const*   name,
+    bool          required,
+    char const*   defaultValue,
+    cJSON const*  replacements)
+{
+  std::string t;
+
+  char const* s = JsonRpc::getString(json, name, required, defaultValue);
+  if (s)
+  {
+    // TODO: do substitution
+    // name == "Every ${type} boy does ${how}"
+    // replacenames = "{"type":"good", "how":"fine"}
+    // result == "Every good boy does fine"
+
+    std::stringstream buff;
+    for (int i = 0, n = static_cast<int>(strlen(s)); i < n; ++i)
+    {
+      if (s[i] != '$')
+      {
+        buff << s[i];
+      }
+      else
+      {
+        i += 2; // skip past ${ 
+        // not really the most resilient code
+
+        int j = i;
+        char token[64];
+        memset(token, 0, sizeof(token));
+
+        while (j < n && s[j] != '}')
+          j++;
+
+        strncpy(token, s + i, (j - i));
+
+        char const* t = JsonRpc::getString(replacements, token, true);
+        buff << t;
+
+        i = j;
+      }
+    }
+
+    t = buff.str();
+  }
+
+  return t;
 }
 
 #if 0

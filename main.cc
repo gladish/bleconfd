@@ -42,22 +42,22 @@ run_test(void* argp)
     cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
     cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(requestId++));
 
-    cJSON* params = cJSON_CreateObject();
-
     // cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
     // cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-scan"));
     // cJSON_AddItemToObject(req, "method", cJSON_CreateString("rpc-list-methods"));
     // cJSON_AddItemToObject(params, "band", cJSON_CreateString("24"));
     // cJSON_AddItemToObject(params, "service", cJSON_CreateString("wifi"));
 
+    #if 0
     // cmd-exec
     cJSON_AddItemToObject(req, "method", cJSON_CreateString("cmd-exec"));
     cJSON_AddItemToObject(params, "command_name", cJSON_CreateString("test-one"));
 
     cJSON* args = cJSON_CreateObject();
-    cJSON_AddItemToObject(args, "path", cJSON_CreateString("/tmp"));
+    cJSON_AddItemToObject(args, "dir", cJSON_CreateString("/tmp"));
     cJSON_AddItemToObject(params, "args", args);
     cJSON_AddItemToObject(req, "params", params);
+    #endif
 
     // config-get-status
     #if 0
@@ -93,10 +93,13 @@ run_test(void* argp)
     cJSON_AddItemToObject(req, "params", params);
     #endif
 
+    // conf-get-keys
+    cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get-keys"));
+
     // config-get
     #if 0
     char key[64];
-    snprintf(key, sizeof(key), "foo.bar%d", i);
+    strcpy(key, "mac");
 
     cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get"));
     cJSON_AddItemToObject(params, "key", cJSON_CreateString(key));
@@ -114,8 +117,6 @@ run_test(void* argp)
 
   return NULL;
 }
-
-std::vector< std::shared_ptr<RpcService> > services();
 
 int main(int argc, char* argv[])
 {
@@ -161,8 +162,6 @@ int main(int argc, char* argv[])
   }
 
   RpcServer server(configFile, config);
-  for (auto const& service : services())
-    server.registerService(service);
 
   #if 0
   pthread_t thread;

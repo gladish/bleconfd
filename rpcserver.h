@@ -26,11 +26,13 @@
 
 
 struct cJSON;
+class RpcService;
 
 using RpcDataHandler = std::function<void (char const* buff, int n)>;
 using RpcNotificationFunction = std::function<void (cJSON const* json)>;
 using RpcMethod = std::function<cJSON* (cJSON const* req)>;
 using RpcMethodMap = std::map< std::string, RpcMethod >;
+using RpcServiceConstructor = std::function<RpcService* ()>;
 
 
 class RpcConnectedClient
@@ -53,7 +55,19 @@ public:
   virtual std::string name() const = 0;
   virtual std::vector<std::string> methodNames() const = 0;
   virtual cJSON* invokeMethod(std::string const& name, cJSON const* req) = 0;
+
+public:
+  static void registerServiceConstructor(std::string const& name, RpcServiceConstructor const& ctor);
+  static RpcService* createServiceByName(std::string const& name);
 };
+
+class RpcServiceRegistrar
+{
+public:
+  RpcServiceRegistrar(std::string const& name, RpcServiceConstructor const& ctor);
+};
+
+#define JSONRPC_SERVICE_DEFINE(NAME, CTOR) static RpcServiceRegistrar __ ## NAME(#NAME, CTOR)
 
 class BasicRpcService : public RpcService
 {
@@ -69,9 +83,12 @@ protected:
   void registerMethod(std::string const& name, RpcMethod const& method);
   void notifyAndDelete(cJSON* json);
 
+protected:
+  cJSON*                  m_config;
+
 private:
-  RpcMethodMap  m_methods;
-  std::string   m_name;
+  RpcMethodMap            m_methods;
+  std::string             m_name;
   RpcNotificationFunction m_notify;
 };
 
@@ -150,5 +167,8 @@ private:
   std::string                         m_config_file;
   RpcMethod                           m_last_chance;
 };
+
+// not sure where to put these
+std::string chomp(char const* s);
 
 #endif

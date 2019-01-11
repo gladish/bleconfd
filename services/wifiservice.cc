@@ -38,14 +38,7 @@
 #include <wpa_ctrl.h>
 #include <cJSON.h>
 
-extern "C"
-{
-  RpcService*
-  WiFiService_Create()
-  {
-    return new WiFiService();
-  }
-}
+JSONRPC_SERVICE_DEFINE(wifi, []{return new WiFiService();});
 
 static struct wpa_ctrl* wpa_request = nullptr;
 static int wpa_shutdown_pipe[2];
@@ -58,17 +51,6 @@ static void   wpaControl_reportEvent(char const* buff, int n);
 static RpcNotificationFunction responseHandler = nullptr;
 
 static cJSON* wpaControl_parseScanResult(std::string const& line);
-
-
-static void chomp(std::string& s)
-{
-  if (s.size() > 0)
-  {
-    char ch = s[s.size() - 1];
-    if (ch == '\r' || ch == '\n')
-      s = s.substr(0, s.size() -1 );
-  }
-}
 
 static bool ssidCompare(char const* s, char const* t)
 {
@@ -478,7 +460,7 @@ wpaControl_connectToNetwork(cJSON const* req)
     ret = wpaControl_runCommand(cmd, buff);
     if (ret == 0)
     {
-      chomp(buff);
+      buff = chomp(buff.c_str());
       if (ssidCompare(buff.c_str(), ssid))
       {
         XLOG_INFO("network '%s' already exists %d", ssid, index);

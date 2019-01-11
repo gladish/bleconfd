@@ -26,14 +26,8 @@
 
 #include <cJSON.h>
 
-extern "C"
-{
-  RpcService*
-  NetService_Create()
-  {
-    return new NetService();
-  }
-}
+JSONRPC_SERVICE_DEFINE(net, []{return new NetService();});
+
 
 namespace
 {

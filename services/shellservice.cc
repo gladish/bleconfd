@@ -20,14 +20,7 @@
 #include <sstream>
 #include <string.h>
 
-extern "C"
-{
-  RpcService*
-  ShellService_Create()
-  {
-    return new ShellService();
-  }
-}
+JSONRPC_SERVICE_DEFINE(cmd, []{return new ShellService();});
 
 namespace
 {
@@ -45,7 +38,7 @@ namespace
   }
 
   cJSON*
-  invokeShellCommand(cJSON const* config)
+  invokeShellCommand(cJSON const* config, cJSON const* args)
   {
     cJSON* res = nullptr;
 
@@ -53,9 +46,12 @@ namespace
     // 1. copy stdout true|false
     // 2. copy stderr true|false
     // ${arg:1} ${arg:2}
-    char const* path = JsonRpc::getString(config, "/exec", true);
+    std::string path = JsonRpc::getStringWithExpansion(config, "/exec", true,
+      nullptr, args);
 
-    FILE* in = popen(path, "r");
+    XLOG_INFO("popen:%s", path.c_str());
+
+    FILE* in = popen(path.c_str(), "r");
     if (in)
     {
       std::stringstream output;
@@ -77,7 +73,7 @@ namespace
     {
       int err = errno;
       res = JsonRpc::makeError(err, "failed to execute %s. %s",
-        path, strerror(errno));
+        path.c_str(), strerror(errno));
     }
 
     return res;
@@ -126,7 +122,8 @@ ShellService::executeCommand(cJSON const* req)
   }
   else
   {
-    res = invokeShellCommand(methodInfo);
+    res = invokeShellCommand(methodInfo,
+      JsonRpc::search(req, "/params/args", false));
   }
 
   return res;
