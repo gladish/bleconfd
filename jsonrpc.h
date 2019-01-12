@@ -48,7 +48,15 @@ public:
     char const*   defaultValue = nullptr,
     cJSON const*  replacements = nullptr);
 
-  static cJSON const* search(cJSON const* json, char const* name, bool required);
+  static cJSON const*
+  search(
+    cJSON const*  json,
+    char const*   name,
+    bool          required);
+
+  static cJSON*
+  fromFile(
+    char const* fname);
 };
 
 #endif

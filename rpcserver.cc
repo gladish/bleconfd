@@ -117,6 +117,7 @@ RpcService::~RpcService()
 
 BasicRpcService::BasicRpcService(std::string const& name)
   : RpcService()
+  , m_config(nullptr)
   , m_name(name)
 {
 }
@@ -200,6 +201,7 @@ BasicRpcService::invokeMethod(std::string const& name, cJSON const* req)
 
 RpcServer::RpcServer(std::string const& configFile, cJSON const* config)
   : m_config_file(configFile)
+  , m_running(false)
 {
   if (config)
     m_config = cJSON_Duplicate(config, true);
@@ -232,6 +234,13 @@ RpcServer::~RpcServer()
 {
   if (m_config)
     cJSON_Delete(m_config);
+
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_running = false;
+  }
+  m_cond.notify_one();
+  m_dispatch_thread->join();
 }
 
 void
@@ -299,6 +308,7 @@ RpcServer::onIncomingMessage(char const* s, int UNUSED_PARAM(n))
 void
 RpcServer::processIncomingQueue()
 {
+  m_running = true;
   while (true)
   {
     cJSON* req = nullptr;
@@ -306,7 +316,13 @@ RpcServer::processIncomingQueue()
 
     {
       std::unique_lock<std::mutex> guard(m_mutex);
-      m_cond.wait(guard, [this] { return !this->m_incoming_queue.empty(); });
+      m_cond.wait(guard, [this] { return !this->m_incoming_queue.empty() || !this->m_running; });
+
+      if (!m_running)
+      {
+        XLOG_INFO("worker thread got shutdown signal");
+        return;
+      }
 
       if (!m_incoming_queue.empty())
       {
@@ -485,6 +501,9 @@ RpcServer::registerService(std::shared_ptr<RpcService> const& service)
       }
     }
   }
+
+  if (conf == nullptr)
+    XLOG_WARN("service %s is missing configuration", service->name().c_str());
 
   service->init(conf, callback);
 }

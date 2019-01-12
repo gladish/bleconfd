@@ -61,6 +61,7 @@ namespace
     cJSON* res = nullptr;
 
     char const* key = JsonRpc::getString(req, "/params/key", true);
+    XLOG_INFO("executing command for setting %s", key);
 
     std::string cmdline = JsonRpc::getString(conf, "exec", true);
     if (op == DynamicPropertyOperation::Get)
@@ -162,6 +163,8 @@ AppSettingsService::init(cJSON const* conf, RpcNotificationFunction const& callb
 cJSON const*
 AppSettingsService::getDynamicConfig(char const* s) const
 {
+  XLOG_INFO("checking for dynamic property %s", s);
+
   cJSON const* dynamicProperties = JsonRpc::search(m_config, "/settings/dynamic_properties", false);
   if (dynamicProperties)
   {
@@ -223,7 +226,7 @@ AppSettingsService::get(cJSON const* req)
   cJSON const* conf = getDynamicConfig(key);
   if (conf)
   {
-    res = exec(req, m_config, DynamicPropertyOperation::Get);
+    res = exec(req, conf, DynamicPropertyOperation::Get);
   }
   else
   {

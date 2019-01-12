@@ -18,10 +18,12 @@
 #include "defs.h"
 
 #include <iomanip>
+#include <fstream>
 #include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <stdarg.h>
 #include <stdint.h>
@@ -419,4 +421,27 @@ cJSON*
 JsonRpc::notImplemented(char const* methodName)
 {
   return JsonRpc::makeError(ENOENT, "method %s not implemented", methodName);
+}
+
+cJSON*
+JsonRpc::fromFile(char const* fname)
+{
+  cJSON* json = nullptr;
+
+  if (!fname || strlen(fname) == 0)
+    return nullptr;
+
+  std::ifstream in;
+  in.exceptions(std::ios::failbit);
+  in.open(fname);
+
+  std::string buff((std::istreambuf_iterator<char>(in)), (std::istreambuf_iterator<char>()));
+  json = cJSON_Parse(buff.c_str());
+  if (!json)
+  {
+    XLOG_WARN("failed to parse json file %s", fname);
+    // TODO: report parsing error
+  }
+
+  return json;
 }

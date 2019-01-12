@@ -13,115 +13,58 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+#include "defs.h"
 #include "rpclogger.h"
 #include "rpcserver.h"
 #include "jsonrpc.h"
 
 #include <getopt.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include <chrono>
+#include <condition_variable>
 #include <iostream>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <cJSON.h>
 
-void*
-run_test(void* argp)
+class SignalingConnectedClient : public RpcConnectedClient
 {
-  RpcServer* server = reinterpret_cast<RpcServer *>(argp);
-
-  std::this_thread::sleep_for(std::chrono::seconds(2));
-
-  uint32_t requestId = 10000;
-
-  for (int i = 0; i < 10; ++i)
+public:
+  SignalingConnectedClient()
+    : RpcConnectedClient()
+    , m_have_response(false) { }
+  virtual ~SignalingConnectedClient() { }
+  virtual void init() override { }
+  virtual void enqueueForSend(char const* UNUSED_PARAM(buff), int UNUSED_PARAM(n)) override
   {
-    cJSON* req = cJSON_CreateObject();
-    cJSON_AddItemToObject(req, "jsonrpc", cJSON_CreateString("2.0"));
-    cJSON_AddItemToObject(req, "id", cJSON_CreateNumber(requestId++));
-
-    // cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-get-status"));
-    // cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-scan"));
-    // cJSON_AddItemToObject(req, "method", cJSON_CreateString("rpc-list-methods"));
-    // cJSON_AddItemToObject(params, "band", cJSON_CreateString("24"));
-    // cJSON_AddItemToObject(params, "service", cJSON_CreateString("wifi"));
-
-    #if 0
-    // cmd-exec
-    cJSON_AddItemToObject(req, "method", cJSON_CreateString("cmd-exec"));
-    cJSON_AddItemToObject(params, "command_name", cJSON_CreateString("test-one"));
-
-    cJSON* args = cJSON_CreateObject();
-    cJSON_AddItemToObject(args, "dir", cJSON_CreateString("/tmp"));
-    cJSON_AddItemToObject(params, "args", args);
-    cJSON_AddItemToObject(req, "params", params);
-    #endif
-
-    // config-get-status
-    #if 0
-    cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get-status"));
-    cJSON_AddItemToObject(req, "params", params);
-    #endif
-
-    // wifi-connect
-    #if 0
-    cJSON* cred = cJSON_CreateObject();
-    cJSON_AddItemToObject(cred, "pass", cJSON_CreateString("jake1234"));
-    cJSON_AddItemToObject(params, "cred", cred);
-
-    cJSON* disco = cJSON_CreateObject();
-    cJSON_AddItemToObject(disco, "ssid", cJSON_CreateString("JAKE_24"));
-    cJSON_AddItemToObject(params, "discovery", disco);
-
-    cJSON_AddItemToObject(req, "params", params);
-    cJSON_AddItemToObject(req, "method", cJSON_CreateString("wifi-connect"));
-    #endif
-
-    // config-set
-    #if 0
-    char key[64];
-    snprintf(key, sizeof(key), "foo.bar%d", i);
-
-    char val[64];
-    snprintf(val, sizeof(val), "SomeValue=%d", i);
-
-    cJSON_AddItemToObject(params, "key", cJSON_CreateString(key));
-    cJSON_AddItemToObject(params, "value", cJSON_CreateString(val));
-    cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-set"));
-    cJSON_AddItemToObject(req, "params", params);
-    #endif
-
-    // conf-get-keys
-    cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get-keys"));
-
-    // config-get
-    #if 0
-    char key[64];
-    strcpy(key, "mac");
-
-    cJSON_AddItemToObject(req, "method", cJSON_CreateString("config-get"));
-    cJSON_AddItemToObject(params, "key", cJSON_CreateString(key));
-    cJSON_AddItemToObject(req, "params", params);
-    #endif
-
-
-    char* s = cJSON_PrintUnformatted(req);
-    server->onIncomingMessage(s, strlen(s));
-    free(s);
-
-    cJSON_Delete(req);
-    sleep(1);
+    {
+      std::lock_guard<std::mutex> lock(m_mutex);
+      m_have_response = true;
+    }
+    m_cond.notify_one();
   }
-
-  return NULL;
-}
+  virtual void run() override
+  {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    m_cond.wait(lock, [this] {return this->m_have_response;});
+  }
+  virtual void setDataHandler(RpcDataHandler const& UNUSED_PARAM(handler)) override { }
+private:
+  std::mutex              m_mutex;
+  std::condition_variable m_cond;
+  bool                    m_have_response;
+};
 
 int main(int argc, char* argv[])
 {
+  cJSON* testInput = nullptr;
   std::string configFile = "bleconfd.json";
   RpcLogger::logger().setLevel(RpcLogLevel::Info);
+
 
   while (true)
   {
@@ -129,11 +72,12 @@ int main(int argc, char* argv[])
     {
       { "config", required_argument, 0, 'c' },
       { "debug",  no_argument, 0, 'd' },
+      { "test",   required_argument, 0, 't' },
       { 0, 0, 0, 0 }
     };
 
     int optionIndex = 0;
-    int c = getopt_long(argc, argv, "c:d", longOptions, &optionIndex);
+    int c = getopt_long(argc, argv, "c:dt:", longOptions, &optionIndex);
     if (c == -1)
       break;
 
@@ -144,58 +88,59 @@ int main(int argc, char* argv[])
         break;
       case 'd':
         RpcLogger::logger().setLevel(RpcLogLevel::Debug);
+      case 't':
+        testInput = JsonRpc::fromFile(optarg);
+        break;
       default:
         break;
     }
   }
 
-  cJSON* config = nullptr;
-  std::ifstream in(configFile.c_str());
-  if (in)
+  XLOG_INFO("loading configuration from file %s", configFile.c_str());
+  cJSON* config = JsonRpc::fromFile(configFile.c_str());
+  RpcServer server(configFile, config);
+  XLOG_INFO("rpc server intialized");
+
+  if (testInput)
   {
-    std::string buff((std::istreambuf_iterator<char>(in)), (std::istreambuf_iterator<char>()));
-    config = cJSON_Parse(buff.c_str());
+    std::shared_ptr<RpcConnectedClient> client(new SignalingConnectedClient());
+    server.setClient(client);
+
+    XLOG_INFO("starting test runner thread");
+    std::thread testRunner([&] {
+//      std::this_thread::sleep_for(std::chrono::seconds(2));
+      char* s = cJSON_PrintUnformatted(testInput);
+      server.onIncomingMessage(s, strlen(s));
+      free(s);
+    });
+    testRunner.join();
+    server.run();
   }
   else
   {
-    config = nullptr;
-  }
+    cJSON const* listenerConfig = cJSON_GetObjectItem(config, "listener");
 
-  RpcServer server(configFile, config);
-
-  #if 0
-  pthread_t thread;
-  pthread_create(&thread, nullptr, &run_test, &server);
-  while (true)
-  {
-    sleep(1);
-  }
-  #endif
-
-  cJSON const* listenerConfig = cJSON_GetObjectItem(config, "listener");
-
-  while (true)
-  {
-    try
+    while (true)
     {
-      std::shared_ptr<RpcListener> listener(RpcListener::create());
-      listener->init(listenerConfig);
+      try
+      {
+        std::shared_ptr<RpcListener> listener(RpcListener::create());
+        listener->init(listenerConfig);
 
-      // blocks here until remote client makes BT connection
-      std::shared_ptr<RpcConnectedClient> client = listener->accept();
-      client->setDataHandler(std::bind(&RpcServer::onIncomingMessage,
-        &server, std::placeholders::_1, std::placeholders::_2));
-      server.setClient(client);
-      server.run();
-    }
-    catch (std::runtime_error const& err)
-    {
-      XLOG_ERROR("unhandled exception:%s", err.what());
-      return -1;
+        // blocks here until remote client makes BT connection
+        std::shared_ptr<RpcConnectedClient> client = listener->accept();
+        client->setDataHandler(std::bind(&RpcServer::onIncomingMessage,
+              &server, std::placeholders::_1, std::placeholders::_2));
+        server.setClient(client);
+        server.run();
+      }
+      catch (std::runtime_error const& err)
+      {
+        XLOG_ERROR("unhandled exception:%s", err.what());
+        return -1;
+      }
     }
   }
-
-  XLOG_INFO("exiting");
 
   return 0;
 }

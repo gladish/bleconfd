@@ -166,6 +166,7 @@ private:
   cJSON*                              m_config;
   std::string                         m_config_file;
   RpcMethod                           m_last_chance;
+  bool                                m_running;
 };
 
 // not sure where to put these
