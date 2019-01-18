@@ -374,12 +374,22 @@ wpaControl_getState()
   std::string res;
   wpaControl_runCommand("STATUS", res);
 
-  std::vector<std::string> lines = split(res, "\n");
-  for (size_t i = 0; i < lines.size(); i++)
+  std::string::size_type begin = 0;
+  std::string::size_type end = 0;
+
+  while (true)
   {
-    std::vector<std::string> parts = split(lines[i], "=");
-    if (!parts[0].compare("wpa_state"))
-      return parts[1];
+    if (res.compare(begin, 10, "wpa_state=") == 0)
+    {
+      begin += 10;
+      return res.substr(begin, (res.find('\n', begin) - begin));
+    }
+
+    end = res.find('\n', begin + 1);
+    if (end == std::string::npos)
+      break;
+
+    begin = end + 1;
   }
 
   return std::string();

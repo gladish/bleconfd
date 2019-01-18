@@ -59,6 +59,18 @@ private:
   bool                    m_have_response;
 };
 
+void
+printHelp()
+{
+  printf("\n");
+  printf("bleconfd [args]\n");
+  printf("\t-c  --config <file> Confuguration file\n");
+  printf("\t-d  --debug         Enable debug logging\n");
+  printf("\t-t  --test   <file> Read json file, exec, and exit\n");
+  printf("\t-h  --help          Print this help and exit\n");
+  exit(0);
+}
+
 int main(int argc, char* argv[])
 {
   cJSON* testInput = nullptr;
@@ -73,6 +85,7 @@ int main(int argc, char* argv[])
       { "config", required_argument, 0, 'c' },
       { "debug",  no_argument, 0, 'd' },
       { "test",   required_argument, 0, 't' },
+      { "help",   no_argument, 0, 'h' },
       { 0, 0, 0, 0 }
     };
 
@@ -88,8 +101,12 @@ int main(int argc, char* argv[])
         break;
       case 'd':
         RpcLogger::logger().setLevel(RpcLogLevel::Debug);
+        break;
       case 't':
         testInput = JsonRpc::fromFile(optarg);
+        break;
+      case 'h':
+        printHelp();
         break;
       default:
         break;
