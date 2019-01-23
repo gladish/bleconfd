@@ -58,130 +58,6 @@ namespace
   std::string const kUuidRpcInbox         {"510c87c8-eb90-11e8-b3dc-17292c2ecc2d"};
   std::string const kUuidRpcEPoll         {"5140f882-eb90-11e8-a835-13d2bd922d3f"};
 
-  std::string
-  PROC_getVariable(char const* file, char const* field)
-  {
-    char buff[256];
-    FILE* f = fopen(file, "r");
-    while (fgets(buff, sizeof(buff) - 1, f) != nullptr)
-    {
-      if (strncmp(buff, field, strlen(field)) == 0)
-      {
-        char* p = strchr(buff, ':');
-        if (p)
-        {
-          p++;
-          while (p && isspace(*p))
-            p++;
-        }
-        if (p)
-        {
-          size_t len = strlen(p);
-          if (len > 0)
-            p[len -1] = '\0';
-          return std::string(p);
-        }
-      }
-    }
-    return std::string();
-  }
-
-  std::vector<std::string> 
-  getDeviceInfoFromDB(std::string const& rCode)
-  {
-    std::ifstream mf("devices_db");
-    std::string line;
-
-    while (std::getline(mf, line))
-    {
-      std::vector<std::string> t = split(line, ",");
-      if (!t[0].compare(rCode))
-        return t;
-    }
-    
-    return std::vector<std::string>();
-  }
-
-  std::string
-  getContentFromFile(char const* file)
-  {
-    std::ifstream mf(file);
-    std::string system_id;
-    if (std::getline(mf, system_id)) 
-    {
-      return system_id;
-    }
-    else 
-    {
-      return std::string("unkown");
-    }
-  }
-  
-  std::string
-  DIS_getSystemId()
-  {
-    // get system id from machine id
-    return getContentFromFile("/etc/machine-id");
-  }
-
-  std::string DIS_getModelNumber()
-  {
-    return getContentFromFile("/proc/device-tree/model");
-  }
-
-  std::string DIS_getSerialNumber()
-  {
-    return PROC_getVariable("/proc/cpuinfo", "Serial");
-  }
-
-  std::string DIS_getFirmwareRevision()
-  {
-    // get version from command "uname -a"
-    std::string full = runCommand("uname -a");
-    size_t index = full.find(" SMP");
-    if (index != std::string::npos)
-    {
-      return full.substr(0, index);
-    }
-    return full;
-  }
-
-  std::string DIS_getHardwareRevision()
-  {
-    return PROC_getVariable("/proc/cpuinfo", "Revision");
-  }
-
-  std::string DIS_getSoftwareRevision()
-  {
-    return std::string(BLECONFD_VERSION);
-  }
-
-  std::string DIS_getManufacturerName()
-  {
-    std::string rCode = DIS_getHardwareRevision();
-    std::vector<std::string> deviceInfo = getDeviceInfoFromDB(rCode);
-    
-    if( deviceInfo.size() > 0 )
-    {
-      return deviceInfo[4];
-    }
-    return std::string("unkown");
-  }
-
-  /**
-   * dump Provider lines
-   **/
-  void DIS_dumpProvider()
-  {
-    XLOG_DEBUG("DIS_getSystemId         = %s", DIS_getSystemId().c_str());
-    XLOG_DEBUG("DIS_getModelNumber      = %s", DIS_getModelNumber().c_str());
-    XLOG_DEBUG("DIS_getSerialNumber     = %s", DIS_getSerialNumber().c_str());
-    XLOG_DEBUG("DIS_getFirmwareRevision = %s", DIS_getFirmwareRevision().c_str());
-    XLOG_DEBUG("DIS_getHardwareRevision = %s", DIS_getHardwareRevision().c_str());
-    XLOG_DEBUG("DIS_getSoftwareRevision = %s", DIS_getSoftwareRevision().c_str());
-    XLOG_DEBUG("DIS_getManufacturerName = %s", DIS_getManufacturerName().c_str());
-  }
-
   void DIS_writeCallback(gatt_db_attribute* UNUSED_PARAM(attr), int err, void* UNUSED_PARAM(argp))
   {
     if (err)
@@ -360,7 +236,7 @@ GattServer::init(cJSON const* conf)
 }
 
 std::shared_ptr<RpcConnectedClient>
-GattServer::accept()
+GattServer::accept(DeviceInfoProvider const& deviceInfoProvider)
 {
   mainloop_init();
 
@@ -379,12 +255,12 @@ GattServer::accept()
   XLOG_INFO("accepted remote connection from:%s", remote_address);
 
   auto clnt = std::shared_ptr<GattClient>(new GattClient(soc));
-  clnt->init();
+  clnt->init(deviceInfoProvider);
   return clnt;
 }
 
 void
-GattClient::init()
+GattClient::init(DeviceInfoProvider const& deviceInfoProvider)
 {
   m_att = bt_att_new(m_fd, 0);
   if (!m_att)
@@ -413,15 +289,15 @@ GattClient::init()
   }
 
   m_timeout_id = mainloop_add_timeout(1000, &GattClient_onTimeout, this, nullptr);
-  buildGattDatabase();
+  buildGattDatabase(deviceInfoProvider);
 }
 
 void
-GattClient::buildGattDatabase()
+GattClient::buildGattDatabase(DeviceInfoProvider const& deviceInfoProvider)
 {
   buildGapService();
   buildGattService();
-  buildDeviceInfoService();
+  buildDeviceInfoService(deviceInfoProvider);
   buildJsonRpcService();
 }
 
@@ -764,13 +640,15 @@ GattClient::addDeviceInfoCharacteristic(
 
   uint8_t const* p = reinterpret_cast<uint8_t const *>(value.c_str());
 
+  XLOG_INFO("setting DIS attr:%d to %s", id, value.c_str());
+
   // I'm not sure whether i like this or just having callbacks setup for reads
   gatt_db_attribute_write(attr, 0, p, value.length(), BT_ATT_OP_WRITE_REQ, nullptr,
       &DIS_writeCallback, nullptr);
 }
 
 void
-GattClient::buildDeviceInfoService()
+GattClient::buildDeviceInfoService(DeviceInfoProvider const& deviceInfoProvider)
 {
   bt_uuid_t uuid;
   bt_uuid16_create(&uuid, kUuidDeviceInfoService);
@@ -780,13 +658,13 @@ GattClient::buildDeviceInfoService()
   // the error went away. Not sure what's going on?
   gatt_db_attribute* service = gatt_db_add_service(m_db, &uuid, true, 30);
 
-  addDeviceInfoCharacteristic(service, kUuidSystemId, DIS_getSystemId());
-  addDeviceInfoCharacteristic(service, kUuidModelNumber, DIS_getModelNumber());
-  addDeviceInfoCharacteristic(service, kUuidSerialNumber, DIS_getSerialNumber());
-  addDeviceInfoCharacteristic(service, kUuidFirmwareRevision, DIS_getFirmwareRevision());
-  addDeviceInfoCharacteristic(service, kUuidHardwareRevision, DIS_getHardwareRevision());
-  addDeviceInfoCharacteristic(service, kUuidSoftwareRevision, DIS_getSoftwareRevision());
-  addDeviceInfoCharacteristic(service, kUuidManufacturerName, DIS_getManufacturerName());
+  addDeviceInfoCharacteristic(service, kUuidSystemId, deviceInfoProvider.GetSystemId());
+  addDeviceInfoCharacteristic(service, kUuidModelNumber, deviceInfoProvider.GetModelNumber());
+  addDeviceInfoCharacteristic(service, kUuidSerialNumber, deviceInfoProvider.GetSerialNumber());
+  addDeviceInfoCharacteristic(service, kUuidFirmwareRevision, deviceInfoProvider.GetFirmwareRevision());
+  addDeviceInfoCharacteristic(service, kUuidHardwareRevision, deviceInfoProvider.GetHardwareRevision());
+  addDeviceInfoCharacteristic(service, kUuidSoftwareRevision, deviceInfoProvider.GetSoftwareRevision());
+  addDeviceInfoCharacteristic(service, kUuidManufacturerName, deviceInfoProvider.GetManufacturerName());
 
   gatt_db_service_set_active(service, true);
 }

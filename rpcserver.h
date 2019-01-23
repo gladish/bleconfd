@@ -34,13 +34,23 @@ using RpcMethod = std::function<cJSON* (cJSON const* req)>;
 using RpcMethodMap = std::map< std::string, RpcMethod >;
 using RpcServiceConstructor = std::function<RpcService* ()>;
 
+struct DeviceInfoProvider
+{
+  std::function< std::string () > GetSystemId;
+  std::function< std::string () > GetModelNumber;
+  std::function< std::string () > GetSerialNumber;
+  std::function< std::string () > GetFirmwareRevision;
+  std::function< std::string () > GetHardwareRevision;
+  std::function< std::string () > GetSoftwareRevision;
+  std::function< std::string () > GetManufacturerName;
+};
 
 class RpcConnectedClient
 {
 public:
   RpcConnectedClient() { }
   virtual ~RpcConnectedClient() { }
-  virtual void init() = 0;
+  virtual void init(DeviceInfoProvider const& deviceInfoProvider) = 0;
   virtual void enqueueForSend(char const* buff, int n) = 0;
   virtual void run() = 0;
   virtual void setDataHandler(RpcDataHandler const& handler) = 0;
@@ -98,7 +108,8 @@ public:
   RpcListener() { }
   virtual ~RpcListener() { }
   virtual void init(cJSON const* conf) = 0;
-  virtual std::shared_ptr<RpcConnectedClient> accept() = 0;
+  virtual std::shared_ptr<RpcConnectedClient>
+    accept(DeviceInfoProvider const& deviceInfoProvider) = 0;
 
 public:
   static std::shared_ptr<RpcListener> create();

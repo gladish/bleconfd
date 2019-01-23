@@ -45,7 +45,7 @@ public:
   GattClient(int fd);
   virtual ~GattClient();
 
-  virtual void init() override;
+  virtual void init(DeviceInfoProvider const& provider) override;
   virtual void enqueueForSend(char const* buff, int n) override; 
   virtual void run() override;
   virtual void setDataHandler(RpcDataHandler const& handler) override
@@ -83,11 +83,11 @@ public:
     uint16_t offset, uint8_t opcode, bt_att* att);
 
 private:
-  void buildGattDatabase();
+  void buildGattDatabase(DeviceInfoProvider const& deviceInfoProvider);
 
   void buildGapService();
   void buildGattService();
-  void buildDeviceInfoService();
+  void buildDeviceInfoService(DeviceInfoProvider const& deviceInfoProvider);
   void addDeviceInfoCharacteristic(gatt_db_attribute* service, uint16_t id,
     std::string const& value);
   void buildJsonRpcService();
@@ -116,7 +116,8 @@ public:
   virtual ~GattServer();
 
   virtual void init(cJSON const* conf) override;
-  virtual std::shared_ptr<RpcConnectedClient> accept() override;
+  virtual std::shared_ptr<RpcConnectedClient>
+    accept(DeviceInfoProvider const& deviceInfoProvider) override;
 
 private:
   int             m_listen_fd;
