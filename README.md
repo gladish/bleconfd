@@ -19,6 +19,8 @@ The setup service defines two GATT characteristics (service uuid -- 503553ca-eb9
 
 After making a GATT connection, the client sends JSON/RPC style requests by writing to the Inbox. The request must be terminated with an ASCII Record Separator character, which is 30 in decimal.
 
+TODO: Since the protocol is text based, we can probably just use a NULL byte.
+
 
 https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/ASCII-Table-wide.svg/875px-ASCII-Table-wide.svg.png
 
@@ -63,8 +65,6 @@ public:
    cJSON* scan(cJSON* const req); // wifi-scan
 }
 ```
-
-* BlueZ 5.45
 
 ### BUILD
 
