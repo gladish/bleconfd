@@ -68,7 +68,7 @@ public:
 
 ### BUILD
 
-Install Dependencies
+## Install Dependencies
 
 * sudo apt-get install libssl-dev
 * sudo apt-get install libglib2.0-dev
@@ -81,7 +81,9 @@ Install Dependencies
 * libglib is for one of the services. It's not required by the actual bleconfd application.
 * bluetooth, dbus, udev, readline, and ical are all bluez dependencies.
 
+`
 mkdir build
 cd build
 cmake ..
 make
+`
