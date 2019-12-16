@@ -25,14 +25,16 @@
 #include "../memory_stream.h"
 #include "../rpcserver.h"
 
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/l2cap.h>
+
+// these are pulled directly from the BlueZ source tree
 extern "C" 
 {
-#include <lib/bluetooth.h>
-#include <lib/l2cap.h>
-#include <lib/uuid.h>
-#include <src/shared/att.h>
-#include <src/shared/gatt-db.h>
-#include <src/shared/gatt-server.h>
+  #include <lib/uuid.h>
+  #include <src/shared/att.h>
+  #include <src/shared/gatt-db.h>
+  #include <src/shared/gatt-server.h>
 }
 
 #include <cJSON.h>

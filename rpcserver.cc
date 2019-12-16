@@ -18,11 +18,14 @@
 #include "rpclogger.h"
 #include "jsonrpc.h"
 
+#include <sstream>
+
 
 #ifdef WITH_BLUEZ
 #include "bluez/gattServer.h"
 #endif
 
+#include <string.h>
 #include <stdarg.h>
 #include <sys/stat.h>
 
@@ -547,11 +550,13 @@ cJSON*
 RpcServer::RpcSystemService::listServices(cJSON const* UNUSED_PARAM(req))
 {
   cJSON* res = cJSON_CreateObject();
-  cJSON* names = cJSON_AddArrayToObject(res, "services");
+  cJSON* names = cJSON_CreateArray();
+  //cJSON* names = cJSON_AddArrayToObject(res, "services");
   for (auto const& kv : m_server->m_services)
   {
     cJSON_AddItemToArray(names, cJSON_CreateString(kv.first.c_str()));
   }
+  cJSON_AddItemToObject(res, "services", names);
   return res;
 }
 
@@ -562,13 +567,15 @@ RpcServer::RpcSystemService::listMethods(cJSON const* req)
   cJSON const* service = JsonRpc::search(req, "/params/service", true);
   if (service)
   {
-    cJSON* names = cJSON_AddArrayToObject(res, "methods");
+    // cJSON* names = cJSON_AddArrayToObject(res, "methods");
+    cJSON* names = cJSON_CreateArray();
     auto itr = m_server->m_services.find(service->valuestring);
     for (std::string const& s : itr->second->methodNames())
     {
       RpcMethodInfo methodInfo(service->valuestring, s);
       cJSON_AddItemToArray(names, cJSON_CreateString(methodInfo.toString().c_str()));
     }
+    cJSON_AddItemToObject(res, "methods", names);
   }
   return res;
 }

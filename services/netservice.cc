@@ -127,7 +127,10 @@ NetService::getInterfaces(cJSON const* UNUSED_PARAM(req))
     cJSON* dev = get_device(res, i->ifa_name);
     cJSON* addrs = cJSON_GetObjectItem(dev, "addrs");
     if (!addrs)
-      addrs = cJSON_AddArrayToObject(dev, "addrs");
+    {
+      addrs = cJSON_CreateArray();
+      cJSON_AddItemToObject(dev, "addrs", addrs);
+    }
 
     cJSON* entry = cJSON_CreateObject();
     to_string(i->ifa_addr, host, sizeof(host));

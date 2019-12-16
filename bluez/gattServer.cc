@@ -32,10 +32,10 @@
 #include <unistd.h>
 #include <cJSON.h>
 
-// from bluez
+// these are pulled directly from the BlueZ source tree
 extern "C" 
 {
-#include <src/shared/mainloop.h>
+  #include <src/shared/mainloop.h>
 }
 
 namespace
@@ -276,7 +276,7 @@ GattClient::init(DeviceInfoProvider const& deviceInfoProvider)
     XLOG_ERROR("failed to create gatt database");
   }
 
-  m_server = bt_gatt_server_new(m_db, m_att, m_mtu);
+  m_server = bt_gatt_server_new(m_db, m_att, m_mtu, 0);
   if (!m_server)
   {
     XLOG_ERROR("failed to create gatt server");
