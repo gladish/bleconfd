@@ -68,11 +68,20 @@ public:
 
 ### BUILD
 
-1. Set these three
-```
-export HOSTAPD_HOME=/home/pi/work/hostap
-export BLUEZ_HOME=/home/pi/work/bluez-5.47
-export CJSON_HOME=/home/pi/work/cJSON
-```
+Install Dependencies
 
-2. `make`
+* sudo apt-get install libssl-dev
+* sudo apt-get install libglib2.0-dev
+* sudo apt-get install libbluetooth-dev
+* sudo apt-get install libdbus-1-dev
+* sudo apt-get install libudev-dev
+* sudo apt-get install libical-dev
+* sudo apt-get install libreadline-dev
+
+* libglib is for one of the services. It's not required by the actual bleconfd application.
+* bluetooth, dbus, udev, readline, and ical are all bluez dependencies.
+
+mkdir build
+cd build
+cmake ..
+make
