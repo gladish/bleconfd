@@ -81,9 +81,9 @@ public:
 * libglib is for one of the services. It's not required by the actual bleconfd application.
 * bluetooth, dbus, udev, readline, and ical are all bluez dependencies.
 
-`
+```
 mkdir build
 cd build
 cmake ..
 make
-`
+```
