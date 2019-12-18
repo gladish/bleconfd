@@ -1,0 +1,133 @@
+<html>
+  <head>
+    <title>BLE Configuration Daemon</title>
+    <script type="text/JavaScript">
+
+      function BLE_BytesToString(dataView) {
+        var s = "";
+        var is_ascii = true;
+
+        for (var i = 0; i < dataView.byteLength; ++i) {
+          var b = dataView.getUint8(i);
+          if (b < 32 || b > 127) {
+            is_ascii = false;
+            break;
+          }
+        }
+
+        if (is_ascii) {
+          for (var i = 0; i < dataView.byteLength; ++i) {
+            s+= String.fromCharCode(dataView.getUint8(i));
+          }
+        } else {
+          s = "[";
+          for (var i = 0; i < dataView.byteLength; ++i) {
+            if (i > 0)
+              s += ",";
+            s += new Number(dataView.getUint8(i));
+          }
+          s += "]";
+        }
+
+        return s;
+      }
+
+      function BLE_Connect(bluetoothDevice) {
+        // TODO: where does MAC come from, print it here
+        console.log("connecting to device:" + bluetoothDevice.name);
+        bluetoothDevice.gatt.connect()
+          .then((bluetoothRemoteGATTServer) => {
+            console.log("connected to device:" + bluetoothDevice.name);
+            BLE_GetDeviceInformation(bluetoothRemoteGATTServer);
+          })
+          .catch((e) => {
+            console.log("connect:" + e);
+          });
+      }
+
+      function BLE_GetCharacteristics(bluetoothRemoteGATTService) {
+        bluetoothRemoteGATTService.getCharacteristics()
+          .then((bluetoothGATTCharacteristics) => {
+            for (var i in bluetoothGATTCharacteristics) {
+              let bluetoothGATTCharacteristic = bluetoothGATTCharacteristics[i];
+              bluetoothGATTCharacteristic.readValue()
+                .then((dataView) => {
+                  var id = bluetoothGATTCharacteristic.uuid;
+                  var cell = document.getElementById(id);
+                  if (cell) {
+                    var content = BLE_BytesToString(dataView);
+                    console.log("setting:" + id + " to: " + content);
+                    cell.innerHTML = content;
+                  } else {
+                    console.log("didn't find HTML element for:" + id);
+                  }
+                })
+                .catch((e) => {
+                  console.log("readValue:" + e);
+                });
+            }
+          })
+          .catch((e) => {
+            console.log("getCharacteristics: " + e);
+          });
+      }
+
+      function BLE_GetDeviceInformation(bluetoothRemoteGATTServer) {
+        bluetoothRemoteGATTServer.getPrimaryService(0x180a)
+          .then((bluetoothRemoteGATTService) => {
+            BLE_GetCharacteristics(bluetoothRemoteGATTService);
+          })
+          .catch((e) => {
+            console.log("getPrimaryService:" + e);
+          });
+      }
+
+      function BLE_StartScan() {
+        let options = {
+          // The PI uses the XPI-SETUP name as default
+          filters: [{
+            name: 'XPI-SETUP'
+          }],
+
+          // only services which are listed here are available when introspecting
+          // the BLE device.
+          optionalServices:
+          [
+            // BLE RPC Service
+            "503553ca-eb90-11e8-ac5b-bb7e434023e8",
+
+            // DeviceInformationService (well-known, hence the 16-bit uuid)
+            // https://www.bluetooth.com/specifications/gatt/services/
+            0x180a
+          ]
+
+          //, acceptAllDevices: true
+        }
+
+        // This call pops up the scan/pair window. When user clicks on device, it
+        // resovles, clicking cancel throws an exception, so let's catch that
+        navigator.bluetooth.requestDevice(options)
+          .then((bluetoothDevice) => {
+            BLE_Connect(bluetoothDevice); 
+          })
+          .catch((e) => {
+            console.log("err:" + e);
+          });
+      }
+    </script>
+  </head>
+
+  <body>
+    <table id="gatt_device_information">
+      <tr><td>System ID</td><td id="00002a23-0000-1000-8000-00805f9b34fb"></td></tr>
+      <tr><td>Model Number</td><td id="00002a24-0000-1000-8000-00805f9b34fb"></td></tr>
+      <tr><td>Serial Number</td><td id="00002a25-0000-1000-8000-00805f9b34fb"></td></tr>
+      <tr><td>Firmware Version</td><td id="00002a26-0000-1000-8000-00805f9b34fb"></td></tr>
+      <tr><td>Hardware Revision</td><td id="00002a27-0000-1000-8000-00805f9b34fb"></td></tr>
+      <tr><td>Software Revision</td><td id="00002a28-0000-1000-8000-00805f9b34fb"></td></tr>
+      <tr><td>Manufacturer Name</td><td id="00002a29-0000-1000-8000-00805f9b34fb"></td></tr>
+    </table>
+    <input type="button" onClick="BLE_StartScan()" name="ble_start_scan_button" value="Start BLE Scan" />
+  </body>
+
+</html>
