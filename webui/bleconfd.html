@@ -16,8 +16,6 @@
       }
 
       JsonRpcClient.prototype.onServerData = function(event) {
-        // This is passed into addEventListener on line 57. The 'this' context is hosed.
-        // this is NOT JsonRpcClient
         this.rpcServerInbox.readValue()
           .then((dataView) => {
             for (var i = 0; i < dataView.byteLength; ++i) {
