@@ -226,6 +226,8 @@ RpcServer::RpcServer(std::string const& configFile, cJSON const* config)
         std::shared_ptr<RpcService> s(RpcService::createServiceByName(name->valuestring));
         if (s)
           registerService(s);
+        else
+          XLOG_WARN("failed to create service:%s", name->valuestring);
       }
     }
   }

@@ -193,13 +193,19 @@ DIS_getSystemId()
 std::string
 DIS_getModelNumber()
 {
-  return DIS_getContentFromFile("/proc/device-tree/model");
+  std::string s = DIS_getContentFromFile("/proc/device-tree/model");
+  size_t n = s.size();
+  if (s[n - 1] == '\0')
+    s = s.substr(0, (n-1));
+  return s;
 }
 
 std::string
 DIS_getSerialNumber()
 {
-  return DIS_getVariable("/proc/cpuinfo", "Serial");
+  std::string s = DIS_getVariable("/proc/cpuinfo", "Serial");
+  XLOG_INFO("s:%s", s.c_str());
+  return s;
 }
 
 std::string

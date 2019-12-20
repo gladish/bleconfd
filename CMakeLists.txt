@@ -81,6 +81,7 @@ add_executable (bleconfd
 	services/netservice.cc
 	services/netservice.cc
 	services/appsettings.cc
+  services/shellservice.cc
   bluez/beacon.cc
   bluez/bleclass.cc
   bluez/gattServer.cc
