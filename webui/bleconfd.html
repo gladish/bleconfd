@@ -3,6 +3,95 @@
     <title>BLE Configuration Daemon</title>
     <script type="text/JavaScript">
 
+      function BLE_Log(message) {
+        console.log(message);
+      }
+
+      function JsonRpcClient(bluetoothRemoteGATTServer) {
+        this.gattServer = bluetoothRemoteGATTServer;
+        this.seqno = 1;
+        this.rpcServerEPoll = null;
+        this.rpcServerInbox = null;
+        this.currentResponse = "";
+      }
+
+      JsonRpcClient.prototype.onServerData = function(event) {
+        // This is passed into addEventListener on line 57. The 'this' context is hosed.
+        // this is NOT JsonRpcClient
+        this.rpcServerInbox.readValue()
+          .then((dataView) => {
+            for (var i = 0; i < dataView.byteLength; ++i) {
+              var n = dataView.getUint8(i);
+              if (n == 30) {
+                this.dispatchResponse(this.currentResponse);
+                this.currentResponse = "";
+              } else {
+                // TODO: utf8 decode
+                this.currentResponse += String.fromCharCode(n);
+              }
+            }
+          });
+      }
+
+      JsonRpcClient.prototype.dispatchResponse = function(res) {
+        BLE_Log("res:" + res);
+      }
+
+      JsonRpcClient.prototype.stringToArrayBuffer = function(s) {
+        var encoder = new TextEncoder("utf-8");
+        return encoder.encode(s + String.fromCharCode(30));
+      }
+
+      JsonRpcClient.prototype.arrayBufferToString = function(buff) {
+        var decoder = new TextDecoder("utf-8");
+        return decoder.decoder(buff);
+      }
+
+      JsonRpcClient.prototype.bindCharacteristics = function() {
+        return new Promise((resolve, reject) => {
+          this.gattServer.getPrimaryService("503553ca-eb90-11e8-ac5b-bb7e434023e8")
+            .then((rpcRemoteGATTService) => {
+              rpcRemoteGATTService.getCharacteristic("510c87c8-eb90-11e8-b3dc-17292c2ecc2d")
+                .then((rpcServerInbox) => {
+                  BLE_Log("set inbox");
+                  this.rpcServerInbox = rpcServerInbox;
+                  if (this.rpcServerEPoll)
+                    resolve();
+                });
+              rpcRemoteGATTService.getCharacteristic("5140f882-eb90-11e8-a835-13d2bd922d3f")
+                .then((rpcServerEPoll) => {
+                  BLE_Log("set epoll");
+
+                  this.rpcServerEPoll = rpcServerEPoll;
+                  this.rpcServerEPoll.startNotifications()
+                    .then((char) => {
+                      var self = this;
+                      this.rpcServerEPoll.addEventListener("characteristicvaluechanged",
+                        (event) => { self.onServerData(event); });
+                    });
+                  if (this.rpcServerInbox)
+                    resolve();
+                });
+            }); // then
+        }); // promise
+      }
+
+      JsonRpcClient.prototype.sendRequest = function(method, params) {
+        var req = new Object();
+        req.jsonrpc = "2.0";
+        req.id = this.seqno++;
+        req.method = method;
+        req.params = params;
+
+        var s = JSON.stringify(req);
+        var buff = this.stringToArrayBuffer(s);
+        this.rpcServerInbox.writeValue(buff);
+
+        BLE_Log("send:" + s);
+      }
+
+      var rpcClient;
+
       function BLE_BytesToString(dataView) {
         var s = "";
         var is_ascii = true;
@@ -34,14 +123,23 @@
 
       function BLE_Connect(bluetoothDevice) {
         // TODO: where does MAC come from, print it here
-        console.log("connecting to device:" + bluetoothDevice.name);
+        BLE_Log("connecting to device:" + bluetoothDevice.name);
         bluetoothDevice.gatt.connect()
           .then((bluetoothRemoteGATTServer) => {
-            console.log("connected to device:" + bluetoothDevice.name);
-            BLE_GetDeviceInformation(bluetoothRemoteGATTServer);
+            BLE_Log("connected to device:" + bluetoothDevice.name);
+            // BLE_GetDeviceInformation(bluetoothRemoteGATTServer);
+            rpcClient = new JsonRpcClient(bluetoothRemoteGATTServer);
+            rpcClient.bindCharacteristics()
+              .then(() => {
+                var params = new Object();
+                params.command_name = "test-one";
+                params.args = new Object();
+                params.args.dir = "/";
+                rpcClient.sendRequest("cmd-exec", params);
+              });
           })
           .catch((e) => {
-            console.log("connect:" + e);
+            BLE_Log("connect:" + e);
           });
       }
 
@@ -50,25 +148,26 @@
           .then((bluetoothGATTCharacteristics) => {
             for (var i in bluetoothGATTCharacteristics) {
               let bluetoothGATTCharacteristic = bluetoothGATTCharacteristics[i];
+              BLE_Log("readValue:" + bluetoothGATTCharacteristic.uuid);
               bluetoothGATTCharacteristic.readValue()
                 .then((dataView) => {
                   var id = bluetoothGATTCharacteristic.uuid;
                   var cell = document.getElementById(id);
                   if (cell) {
                     var content = BLE_BytesToString(dataView);
-                    console.log("setting:" + id + " to: " + content);
+                    BLE_Log("setting:" + id + " to: " + content);
                     cell.innerHTML = content;
                   } else {
-                    console.log("didn't find HTML element for:" + id);
+                    BLE_Log("didn't find HTML element for:" + id);
                   }
                 })
                 .catch((e) => {
-                  console.log("readValue:" + e);
+                  BLE_Log("readValue:" + e);
                 });
             }
           })
           .catch((e) => {
-            console.log("getCharacteristics: " + e);
+            BLE_Log("getCharacteristics: " + e);
           });
       }
 
@@ -78,16 +177,17 @@
             BLE_GetCharacteristics(bluetoothRemoteGATTService);
           })
           .catch((e) => {
-            console.log("getPrimaryService:" + e);
+            BLE_Log("getPrimaryService:" + e);
           });
       }
 
       function BLE_StartScan() {
         let options = {
           // The PI uses the XPI-SETUP name as default
-          filters: [{
-            name: 'XPI-SETUP'
-          }],
+
+          //filters: [{
+          //  name: "XPI-SETUP"
+          //}],
 
           // only services which are listed here are available when introspecting
           // the BLE device.
@@ -101,7 +201,7 @@
             0x180a
           ]
 
-          //, acceptAllDevices: true
+          , acceptAllDevices: true
         }
 
         // This call pops up the scan/pair window. When user clicks on device, it
@@ -111,7 +211,7 @@
             BLE_Connect(bluetoothDevice); 
           })
           .catch((e) => {
-            console.log("err:" + e);
+            BLE_Log("err:" + e);
           });
       }
     </script>
