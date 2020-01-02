@@ -43,6 +43,12 @@ std::string DIS_getContentFromFile(char const* fname);
 std::string DIS_getVariable(char const* fname, char const* field);
 std::vector<std::string> DIS_getDeviceInfoFromDB(std::string const& rCode);
 
+static std::string getFullPath(std::string const& f)
+{
+  char buff[1024] = {0};
+  char* s = realpath(f.c_str(), buff);
+  return (s != nullptr ? std::string(s) : f);
+}
 
 class SignalingConnectedClient : public RpcConnectedClient
 {
@@ -126,8 +132,14 @@ int main(int argc, char* argv[])
     }
   }
 
-  XLOG_INFO("loading configuration from file %s", configFile.c_str());
+  XLOG_INFO("loading configuration from file %s", getFullPath(configFile).c_str());
   cJSON* config = JsonRpc::fromFile(configFile.c_str());
+  if (!config)
+  {
+    XLOG_ERROR("failed to load configuration file from:%s\n", configFile.c_str());
+    return 1;
+  }
+
   RpcServer server(configFile, config);
   XLOG_INFO("rpc server intialized");
 
@@ -254,6 +266,9 @@ DIS_getContentFromFile(char const* fname)
   std::ifstream infile(fname);
   if (!std::getline(infile, id))
     id = "unknown";
+
+  if (id[id.size()] == '\0')
+    id = id.substr(0, id.size() - 1);
 
   return id;
 }
