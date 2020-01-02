@@ -70,6 +70,16 @@ link_directories(
   ${CMAKE_CURRENT_BINARY_DIR}/deps/src/bluez/src/.libs
   ${CMAKE_CURRENT_BINARY_DIR}/deps/src/bluez/lib/.libs)
 
+add_custom_command(
+	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/deps/src/hostapd/src/common/wpa_ctrl.c
+	COMMAND touch ${CMAKE_CURRENT_BINARY_DIR}/deps/src/hostapd/src/common/wpa_ctrl_dummy.c
+	DEPNDS hostapd)
+
+add_custom_command(
+	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/deps/src/hostapd/src/utils/os_unix.c
+	COMMAND touch ${CMAKE_CURRENT_BINARY_DIR}/deps/src/hostapd/src/utils/os_unix_dummy.c
+	DEPNDS hostapd)
+
 add_executable (bleconfd
 	main.cc
 	jsonrpc.cc
