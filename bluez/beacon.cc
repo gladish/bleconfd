@@ -420,7 +420,7 @@ startBeacon(std::string const& name, int deviceId)
   {
     char addr[18];
     ba2str(&deviceInfo.bdaddr, addr);
-    XLOG_INFO("bluetooh mac:%s", addr);
+    XLOG_INFO("bluetooth mac:%s", addr);
 
     for (int i = 0; i < 6; ++i)
       instanceId[i] = deviceInfo.bdaddr.b[i];

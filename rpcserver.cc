@@ -305,8 +305,8 @@ RpcServer::onIncomingMessage(char const* s, int UNUSED_PARAM(n))
   }
   else
   {
-    //TODO:
     XLOG_ERROR("failed to parse incoming json request");
+    XLOG_ERROR("\"%s\"", s);
   }
 }
 
